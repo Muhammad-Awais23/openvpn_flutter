@@ -8,25 +8,24 @@
 
 /* Begin PBXBuildFile section */
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
-		27943ADCF203914DB1ED7EDB /* Pods_VPNExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42DF978FD322A8300CDC4355 /* Pods_VPNExtension.framework */; };
+		34842AD42E6067CE002DE3C2 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 414F810D277EDF1800823C7F /* NetworkExtension.framework */; };
+		34842ADC2E6067CE002DE3C2 /* VPNExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 34842AD32E6067CD002DE3C2 /* VPNExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		414F810E277EDF1800823C7F /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 414F810D277EDF1800823C7F /* NetworkExtension.framework */; };
-		414F8127277F5FE900823C7F /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 414F810D277EDF1800823C7F /* NetworkExtension.framework */; };
-		414F812A277F5FE900823C7F /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 414F8129277F5FE900823C7F /* PacketTunnelProvider.swift */; };
-		414F812F277F5FE900823C7F /* VPNExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 414F8126277F5FE900823C7F /* VPNExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		4F229D18F65D6DB76D5D9EFC /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BA2ECD5C7A9EF3FEB19208A9 /* Pods_Runner.framework */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
-		8CAAC5DBE36F5E564836AAC6 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8C34416E4224B211C092E3C8 /* Pods_Runner.framework */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		F81D7C86D3D037075EB55B26 /* Pods_VPNExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 87DE47F95C0FF627A65143AA /* Pods_VPNExtension.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		414F812D277F5FE900823C7F /* PBXContainerItemProxy */ = {
+		34842ADA2E6067CE002DE3C2 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 414F8125277F5FE900823C7F;
+			remoteGlobalIDString = 34842AD22E6067CD002DE3C2;
 			remoteInfo = VPNExtension;
 		};
 /* End PBXContainerItemProxy section */
@@ -38,7 +37,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				414F812F277F5FE900823C7F /* VPNExtension.appex in Embed App Extensions */,
+				34842ADC2E6067CE002DE3C2 /* VPNExtension.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -56,29 +55,18 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		02A5452F38927BB2143A7398 /* Pods-VPNExtension.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-VPNExtension.release.xcconfig"; path = "Target Support Files/Pods-VPNExtension/Pods-VPNExtension.release.xcconfig"; sourceTree = "<group>"; };
+		0A4DB17EA96AC03A9A0E3F5F /* Pods-VPNExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-VPNExtension.debug.xcconfig"; path = "Target Support Files/Pods-VPNExtension/Pods-VPNExtension.debug.xcconfig"; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
-		160186CEBA8DB4239E3F19F4 /* Pods-VPNExtension.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-VPNExtension.profile.xcconfig"; path = "Target Support Files/Pods-VPNExtension/Pods-VPNExtension.profile.xcconfig"; sourceTree = "<group>"; };
-		339DB5C3D6EE52DC8A844AC7 /* Pods-VPNExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-VPNExtension.debug.xcconfig"; path = "Target Support Files/Pods-VPNExtension/Pods-VPNExtension.debug.xcconfig"; sourceTree = "<group>"; };
+		34842AD32E6067CD002DE3C2 /* VPNExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VPNExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		414F810C277EDF1800823C7F /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		414F810D277EDF1800823C7F /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
-		414F8116277EE0BF00823C7F /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
-		414F8118277EE0BF00823C7F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		414F8119277EE0BF00823C7F /* VPNExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VPNExtension.entitlements; sourceTree = "<group>"; };
-		414F8126277F5FE900823C7F /* VPNExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VPNExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		414F8129277F5FE900823C7F /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
-		414F812B277F5FE900823C7F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		414F812C277F5FE900823C7F /* VPNExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VPNExtension.entitlements; sourceTree = "<group>"; };
-		42AB0A4C2E103974BEB27E84 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
-		42DF978FD322A8300CDC4355 /* Pods_VPNExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_VPNExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		4C8CF5E8BD32A398085F477E /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
-		7206C892C0179DC8B30F0965 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
+		45189EB2ABD246B47CC311F9 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
-		8C34416E4224B211C092E3C8 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		87DE47F95C0FF627A65143AA /* Pods_VPNExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_VPNExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -86,15 +74,41 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		9C113642643BC57E3C9E37AB /* Pods-VPNExtension.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-VPNExtension.profile.xcconfig"; path = "Target Support Files/Pods-VPNExtension/Pods-VPNExtension.profile.xcconfig"; sourceTree = "<group>"; };
+		BA2ECD5C7A9EF3FEB19208A9 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		D759D7F5C31953CAC0EB824A /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		E1F8A2D46E0ABB8B6FB19749 /* Pods-VPNExtension.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-VPNExtension.release.xcconfig"; path = "Target Support Files/Pods-VPNExtension/Pods-VPNExtension.release.xcconfig"; sourceTree = "<group>"; };
+		EA5FEC67B10038E936CCDB94 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		34842ADD2E6067CE002DE3C2 /* Exceptions for "VPNExtension" folder in "VPNExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 34842AD22E6067CD002DE3C2 /* VPNExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		34842AD52E6067CE002DE3C2 /* VPNExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				34842ADD2E6067CE002DE3C2 /* Exceptions for "VPNExtension" folder in "VPNExtension" target */,
+			);
+			path = VPNExtension;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
-		414F8123277F5FE900823C7F /* Frameworks */ = {
+		34842AD02E6067CD002DE3C2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				414F8127277F5FE900823C7F /* NetworkExtension.framework in Frameworks */,
-				27943ADCF203914DB1ED7EDB /* Pods_VPNExtension.framework in Frameworks */,
+				34842AD42E6067CE002DE3C2 /* NetworkExtension.framework in Frameworks */,
+				F81D7C86D3D037075EB55B26 /* Pods_VPNExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,43 +116,23 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8CAAC5DBE36F5E564836AAC6 /* Pods_Runner.framework in Frameworks */,
 				414F810E277EDF1800823C7F /* NetworkExtension.framework in Frameworks */,
+				4F229D18F65D6DB76D5D9EFC /* Pods_Runner.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		414F8115277EE0BF00823C7F /* VPNExtension */ = {
-			isa = PBXGroup;
-			children = (
-				414F8116277EE0BF00823C7F /* PacketTunnelProvider.swift */,
-				414F8118277EE0BF00823C7F /* Info.plist */,
-				414F8119277EE0BF00823C7F /* VPNExtension.entitlements */,
-			);
-			path = VPNExtension;
-			sourceTree = "<group>";
-		};
-		414F8128277F5FE900823C7F /* VPNExtension */ = {
-			isa = PBXGroup;
-			children = (
-				414F8129277F5FE900823C7F /* PacketTunnelProvider.swift */,
-				414F812B277F5FE900823C7F /* Info.plist */,
-				414F812C277F5FE900823C7F /* VPNExtension.entitlements */,
-			);
-			path = VPNExtension;
-			sourceTree = "<group>";
-		};
 		58BD2BCC5238B46CA13F1784 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				7206C892C0179DC8B30F0965 /* Pods-Runner.debug.xcconfig */,
-				4C8CF5E8BD32A398085F477E /* Pods-Runner.release.xcconfig */,
-				42AB0A4C2E103974BEB27E84 /* Pods-Runner.profile.xcconfig */,
-				339DB5C3D6EE52DC8A844AC7 /* Pods-VPNExtension.debug.xcconfig */,
-				02A5452F38927BB2143A7398 /* Pods-VPNExtension.release.xcconfig */,
-				160186CEBA8DB4239E3F19F4 /* Pods-VPNExtension.profile.xcconfig */,
+				45189EB2ABD246B47CC311F9 /* Pods-Runner.debug.xcconfig */,
+				EA5FEC67B10038E936CCDB94 /* Pods-Runner.release.xcconfig */,
+				D759D7F5C31953CAC0EB824A /* Pods-Runner.profile.xcconfig */,
+				0A4DB17EA96AC03A9A0E3F5F /* Pods-VPNExtension.debug.xcconfig */,
+				E1F8A2D46E0ABB8B6FB19749 /* Pods-VPNExtension.release.xcconfig */,
+				9C113642643BC57E3C9E37AB /* Pods-VPNExtension.profile.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -147,8 +141,8 @@
 			isa = PBXGroup;
 			children = (
 				414F810D277EDF1800823C7F /* NetworkExtension.framework */,
-				8C34416E4224B211C092E3C8 /* Pods_Runner.framework */,
-				42DF978FD322A8300CDC4355 /* Pods_VPNExtension.framework */,
+				BA2ECD5C7A9EF3FEB19208A9 /* Pods_Runner.framework */,
+				87DE47F95C0FF627A65143AA /* Pods_VPNExtension.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -169,8 +163,7 @@
 			children = (
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
-				414F8115277EE0BF00823C7F /* VPNExtension */,
-				414F8128277F5FE900823C7F /* VPNExtension */,
+				34842AD52E6067CE002DE3C2 /* VPNExtension */,
 				97C146EF1CF9000F007C117D /* Products */,
 				58BD2BCC5238B46CA13F1784 /* Pods */,
 				7A7B2EBC5DC3A5AC09BE52C8 /* Frameworks */,
@@ -181,7 +174,7 @@
 			isa = PBXGroup;
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
-				414F8126277F5FE900823C7F /* VPNExtension.appex */,
+				34842AD32E6067CD002DE3C2 /* VPNExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -205,42 +198,45 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		414F8125277F5FE900823C7F /* VPNExtension */ = {
+		34842AD22E6067CD002DE3C2 /* VPNExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 414F8130277F5FE900823C7F /* Build configuration list for PBXNativeTarget "VPNExtension" */;
+			buildConfigurationList = 34842ADE2E6067CE002DE3C2 /* Build configuration list for PBXNativeTarget "VPNExtension" */;
 			buildPhases = (
-				3F480C1A61F117F06096298A /* [CP] Check Pods Manifest.lock */,
-				414F8122277F5FE900823C7F /* Sources */,
-				414F8123277F5FE900823C7F /* Frameworks */,
-				414F8124277F5FE900823C7F /* Resources */,
+				9707E1C258A540BCF8AC4A27 /* [CP] Check Pods Manifest.lock */,
+				34842ACF2E6067CD002DE3C2 /* Sources */,
+				34842AD02E6067CD002DE3C2 /* Frameworks */,
+				34842AD12E6067CD002DE3C2 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
+			fileSystemSynchronizedGroups = (
+				34842AD52E6067CE002DE3C2 /* VPNExtension */,
+			);
 			name = VPNExtension;
 			productName = VPNExtension;
-			productReference = 414F8126277F5FE900823C7F /* VPNExtension.appex */;
+			productReference = 34842AD32E6067CD002DE3C2 /* VPNExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
 			buildPhases = (
-				054FCCB2A6ECC8C69673DAE8 /* [CP] Check Pods Manifest.lock */,
+				5EFBAC8A022A9933F3E50558 /* [CP] Check Pods Manifest.lock */,
+				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
+				1786F8EAC04417E6D0C28D80 /* [CP] Embed Pods Frameworks */,
+				97C146EC1CF9000F007C117D /* Resources */,
+				414F8121277EE0BF00823C7F /* Embed App Extensions */,
 				9740EEB61CF901F6004384FC /* Run Script */,
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
-				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
-				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
-				C48572CEEC795E5E8BA8C739 /* [CP] Embed Pods Frameworks */,
-				414F8121277EE0BF00823C7F /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				414F812E277F5FE900823C7F /* PBXTargetDependency */,
+				34842ADB2E6067CE002DE3C2 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -253,12 +249,12 @@
 		97C146E61CF9000F007C117D /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastSwiftUpdateCheck = 1320;
+				LastSwiftUpdateCheck = 1600;
 				LastUpgradeCheck = 1510;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
-					414F8125277F5FE900823C7F = {
-						CreatedOnToolsVersion = 13.2.1;
+					34842AD22E6067CD002DE3C2 = {
+						CreatedOnToolsVersion = 16.0;
 					};
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
@@ -267,7 +263,6 @@
 				};
 			};
 			buildConfigurationList = 97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */;
-			compatibilityVersion = "Xcode 9.3";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -275,18 +270,19 @@
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
+			preferredProjectObjectVersion = 77;
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
-				414F8125277F5FE900823C7F /* VPNExtension */,
+				34842AD22E6067CD002DE3C2 /* VPNExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		414F8124277F5FE900823C7F /* Resources */ = {
+		34842AD12E6067CD002DE3C2 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -307,7 +303,40 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		054FCCB2A6ECC8C69673DAE8 /* [CP] Check Pods Manifest.lock */ = {
+		1786F8EAC04417E6D0C28D80 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		3B06AD1E1E4923F5004D2608 /* Thin Binary */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}",
+			);
+			name = "Thin Binary";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
+		};
+		5EFBAC8A022A9933F3E50558 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -329,23 +358,7 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		3B06AD1E1E4923F5004D2608 /* Thin Binary */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}",
-			);
-			name = "Thin Binary";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" embed_and_thin";
-		};
-		3F480C1A61F117F06096298A /* [CP] Check Pods Manifest.lock */ = {
+		9707E1C258A540BCF8AC4A27 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -382,31 +395,13 @@
 			shellPath = /bin/sh;
 			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
 		};
-		C48572CEEC795E5E8BA8C739 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		414F8122277F5FE900823C7F /* Sources */ = {
+		34842ACF2E6067CD002DE3C2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				414F812A277F5FE900823C7F /* PacketTunnelProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -422,10 +417,10 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		414F812E277F5FE900823C7F /* PBXTargetDependency */ = {
+		34842ADB2E6067CE002DE3C2 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 414F8125277F5FE900823C7F /* VPNExtension */;
-			targetProxy = 414F812D277F5FE900823C7F /* PBXContainerItemProxy */;
+			target = 34842AD22E6067CD002DE3C2 /* VPNExtension */;
+			targetProxy = 34842ADA2E6067CE002DE3C2 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -503,19 +498,18 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = 426BMQ75MF;
+				DEVELOPMENT_TEAM = TXVLVF88W5;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = id.laskarmedia.openvpnFlutterExample;
+				PRODUCT_BUNDLE_IDENTIFIER = com.digitalrootstech.private.browser.secure.vpn.proxy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -523,12 +517,13 @@
 			};
 			name = Profile;
 		};
-		414F8131277F5FE900823C7F /* Debug */ = {
+		34842ADF2E6067CE002DE3C2 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 339DB5C3D6EE52DC8A844AC7 /* Pods-VPNExtension.debug.xcconfig */;
+			baseConfigurationReference = 0A4DB17EA96AC03A9A0E3F5F /* Pods-VPNExtension.debug.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
@@ -536,25 +531,27 @@
 				CODE_SIGN_ENTITLEMENTS = VPNExtension/VPNExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 426BMQ75MF;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
+				DEVELOPMENT_TEAM = TXVLVF88W5;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = VPNExtension;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = id.laskarmedia.openvpnFlutterExample.VPNExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.digitalrootstech.private.browser.secure.vpn.proxy.VPNExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -562,12 +559,13 @@
 			};
 			name = Debug;
 		};
-		414F8132277F5FE900823C7F /* Release */ = {
+		34842AE02E6067CE002DE3C2 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 02A5452F38927BB2143A7398 /* Pods-VPNExtension.release.xcconfig */;
+			baseConfigurationReference = E1F8A2D46E0ABB8B6FB19749 /* Pods-VPNExtension.release.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
@@ -575,21 +573,23 @@
 				CODE_SIGN_ENTITLEMENTS = VPNExtension/VPNExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 426BMQ75MF;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
+				DEVELOPMENT_TEAM = TXVLVF88W5;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = VPNExtension;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 1.0;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = id.laskarmedia.openvpnFlutterExample.VPNExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.digitalrootstech.private.browser.secure.vpn.proxy.VPNExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -598,12 +598,13 @@
 			};
 			name = Release;
 		};
-		414F8133277F5FE900823C7F /* Profile */ = {
+		34842AE12E6067CE002DE3C2 /* Profile */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 160186CEBA8DB4239E3F19F4 /* Pods-VPNExtension.profile.xcconfig */;
+			baseConfigurationReference = 9C113642643BC57E3C9E37AB /* Pods-VPNExtension.profile.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
@@ -611,21 +612,23 @@
 				CODE_SIGN_ENTITLEMENTS = VPNExtension/VPNExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 426BMQ75MF;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
+				DEVELOPMENT_TEAM = TXVLVF88W5;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VPNExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = VPNExtension;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MARKETING_VERSION = 1.0;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = id.laskarmedia.openvpnFlutterExample.VPNExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.digitalrootstech.private.browser.secure.vpn.proxy.VPNExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -745,19 +748,18 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = 426BMQ75MF;
+				DEVELOPMENT_TEAM = TXVLVF88W5;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = id.laskarmedia.openvpnFlutterExample;
+				PRODUCT_BUNDLE_IDENTIFIER = com.digitalrootstech.private.browser.secure.vpn.proxy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -770,19 +772,18 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = 426BMQ75MF;
+				DEVELOPMENT_TEAM = TXVLVF88W5;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = id.laskarmedia.openvpnFlutterExample;
+				PRODUCT_BUNDLE_IDENTIFIER = com.digitalrootstech.private.browser.secure.vpn.proxy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -793,12 +794,12 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		414F8130277F5FE900823C7F /* Build configuration list for PBXNativeTarget "VPNExtension" */ = {
+		34842ADE2E6067CE002DE3C2 /* Build configuration list for PBXNativeTarget "VPNExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				414F8131277F5FE900823C7F /* Debug */,
-				414F8132277F5FE900823C7F /* Release */,
-				414F8133277F5FE900823C7F /* Profile */,
+				34842ADF2E6067CE002DE3C2 /* Debug */,
+				34842AE02E6067CE002DE3C2 /* Release */,
+				34842AE12E6067CE002DE3C2 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
