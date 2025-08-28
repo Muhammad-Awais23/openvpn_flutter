@@ -63,16 +63,27 @@ class OpenVPN {
 
   VPNStage? _lastStage;
 
+  /// Track if auto-reconnect is enabled
+  bool _autoReconnectEnabled = false;
+
   /// is a listener to see vpn status detail
   final Function(VpnStatus? data)? onVpnStatusChanged;
 
   /// is a listener to see what stage the connection was
   final Function(VPNStage stage, String rawStage)? onVpnStageChanged;
 
+  /// is a listener for auto-reconnect events
+  final Function(String message)? onAutoReconnectEvent;
+
   /// OpenVPN's Constructions, don't forget to implement the listeners
   /// onVpnStatusChanged is a listener to see vpn status detail
   /// onVpnStageChanged is a listener to see what stage the connection was
-  OpenVPN({this.onVpnStatusChanged, this.onVpnStageChanged});
+  /// onAutoReconnectEvent is a listener for auto-reconnect related events
+  OpenVPN({
+    this.onVpnStatusChanged,
+    this.onVpnStageChanged,
+    this.onAutoReconnectEvent,
+  });
 
   ///This function should be called before any usage of OpenVPN
   ///All params required for iOS, make sure you read the plugin's documentation
@@ -82,12 +93,15 @@ class OpenVPN {
   ///
   ///localizedDescription is for description to show in user's settings
   ///
+  ///autoReconnect enables automatic reconnection when VPN is disconnected from system settings/control center (iOS only)
+  ///
   ///
   ///Will return latest VPNStage
   Future<void> initialize({
     String? providerBundleIdentifier,
     String? localizedDescription,
     String? groupIdentifier,
+    bool autoReconnect = false,
     Function(VpnStatus status)? lastStatus,
     Function(VPNStage stage)? lastStage,
   }) async {
@@ -98,13 +112,17 @@ class OpenVPN {
               localizedDescription != null,
           "These values are required for ios.");
     }
+
+    _autoReconnectEnabled = autoReconnect;
     onVpnStatusChanged?.call(VpnStatus.empty());
     initialized = true;
     _initializeListener();
+
     return _channelControl.invokeMethod("initialize", {
       "groupIdentifier": groupIdentifier,
       "providerBundleIdentifier": providerBundleIdentifier,
       "localizedDescription": localizedDescription,
+      "autoReconnect": autoReconnect,
     }).then((value) {
       Future.wait([
         status().then((value) => lastStatus?.call(value)),
@@ -117,6 +135,27 @@ class OpenVPN {
       ]);
     });
   }
+
+  /// Set auto-reconnect feature on/off at runtime
+  /// Only works on iOS
+  Future<void> setAutoReconnect({required bool enabled}) async {
+    if (!initialized) throw ("OpenVPN need to be initialized");
+    if (!Platform.isIOS) {
+      onAutoReconnectEvent?.call("Auto-reconnect is only supported on iOS");
+      return;
+    }
+
+    _autoReconnectEnabled = enabled;
+    await _channelControl.invokeMethod("setAutoReconnect", {
+      "enabled": enabled,
+    });
+
+    onAutoReconnectEvent
+        ?.call(enabled ? "Auto-reconnect enabled" : "Auto-reconnect disabled");
+  }
+
+  /// Get current auto-reconnect status
+  bool get autoReconnectEnabled => _autoReconnectEnabled;
 
   ///Connect to VPN
   ///
@@ -255,6 +294,16 @@ class OpenVPN {
     return output.join("\n");
   }
 
+  /// Clean up resources when disposing
+  void dispose() {
+    _vpnStatusTimer?.cancel();
+    _vpnStatusTimer = null;
+    if (initialized) {
+      _channelControl.invokeMethod("dispose");
+    }
+    initialized = false;
+  }
+
   ///Convert duration that produced by native side as Connection Time
   String _duration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
@@ -280,14 +329,26 @@ class OpenVPN {
     return VPNStage.unknown;
   }
 
-  ///Initialize listener, called when you start connection and stoped while
+  ///Initialize listener, called when you start connection and stopped while disconnected
   void _initializeListener() {
     _vpnStageSnapshot().listen((event) {
       var vpnStage = _strToStage(event);
       if (vpnStage != _lastStage) {
         onVpnStageChanged?.call(vpnStage, event);
         _lastStage = vpnStage;
+
+        // Handle auto-reconnect events
+        if (Platform.isIOS && _autoReconnectEnabled) {
+          if (vpnStage == VPNStage.connecting) {
+            // This might be an auto-reconnect attempt
+            onAutoReconnectEvent?.call("Attempting to reconnect...");
+          } else if (vpnStage == VPNStage.connected &&
+              _lastStage == VPNStage.connecting) {
+            onAutoReconnectEvent?.call("Auto-reconnect successful");
+          }
+        }
       }
+
       if (vpnStage != VPNStage.disconnected) {
         if (Platform.isAndroid) {
           _createTimer();
