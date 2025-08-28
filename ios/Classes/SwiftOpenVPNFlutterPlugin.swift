@@ -65,14 +65,21 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 self.initialized = true
                 break;
             case "disconnect":
+                // mark as user-intended disconnect so auto-reconnect won't trigger
+                SwiftOpenVPNFlutterPlugin.utils.userInitiatedDisconnect = true
                 SwiftOpenVPNFlutterPlugin.utils.stopVPN()
+                result(nil)
                 break;
             case "connect":
                 if !self.initialized {
                     result(FlutterError(code: "-1",
                                         message: "VPNEngine need to be initialize",
                                         details: nil));
+                    return
                 }
+                // clear user-initiated flag for automatic reconnect behavior
+                SwiftOpenVPNFlutterPlugin.utils.userInitiatedDisconnect = false
+                
                 let config: String? = (call.arguments as? [String : Any])? ["config"] as? String
                 let username: String? = (call.arguments as? [String : Any])? ["username"] as? String
                 let password: String? = (call.arguments as? [String : Any])? ["password"] as? String
@@ -95,7 +102,16 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 break;
             case "dispose":
                 self.initialized = false
+                result(nil)
+                break;
+            case "setAutoReconnect":
+                // expects argument: {"enabled": Bool}
+                let enabled = (call.arguments as? [String: Any])?["enabled"] as? Bool ?? false
+                SwiftOpenVPNFlutterPlugin.utils.setAutoReconnect(enabled: enabled)
+                result(nil)
+                break;
             default:
+                result(FlutterMethodNotImplemented)
                 break;
             }
         })
@@ -124,17 +140,43 @@ class VPNUtils {
     var providerBundleIdentifier : String?
     var localizedDescription : String?
     var groupIdentifier : String?
-    var stage : FlutterEventSink!
+    var stage : FlutterEventSink?
     var vpnStageObserver : NSObjectProtocol?
+    
+    // Auto-reconnect related flags
+    var autoReconnectEnabled: Bool = false
+    var isReconnecting: Bool = false
+    var userInitiatedDisconnect: Bool = false
+    var reconnectDelay: TimeInterval = 3.0
     
     func loadProviderManager(completion:@escaping (_ error : Error?) -> Void)  {
         NETunnelProviderManager.loadAllFromPreferences { (managers, error)  in
             if error == nil {
                 self.providerManager = managers?.first ?? NETunnelProviderManager()
+                // ensure we are observing VPN status changes
+                self.installVpnStatusObserver()
                 completion(nil)
             } else {
                 completion(error)
             }
+        }
+    }
+    
+    // Install a single global observer for NEVPNStatus changes
+    private func installVpnStatusObserver() {
+        // Remove previous observer if present
+        if let obs = vpnStageObserver {
+            NotificationCenter.default.removeObserver(obs, name: NSNotification.Name.NEVPNStatusDidChange, object: nil)
+            vpnStageObserver = nil
+        }
+        vpnStageObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name.NEVPNStatusDidChange,
+                                                                   object: nil,
+                                                                   queue: nil) { [weak self] notification in
+            guard let self = self else { return }
+            guard let nevpnconn = notification.object as? NEVPNConnection else { return }
+            let status = nevpnconn.status
+            self.onVpnStatusChanged(notification: status)
+            self.handleReconnectionIfNeeded(status: status)
         }
     }
     
@@ -220,19 +262,10 @@ class VPNUtils {
                                 return;
                             }
                             do {
-                                if self.vpnStageObserver != nil {
-                                    NotificationCenter.default.removeObserver(self.vpnStageObserver!,
-                                                                              name: NSNotification.Name.NEVPNStatusDidChange,
-                                                                              object: nil)
-                                }
-                                self.vpnStageObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name.NEVPNStatusDidChange,
-                                                                                               object: nil ,
-                                                                                               queue: nil) { [weak self] notification in
-                                    let nevpnconn = notification.object as! NEVPNConnection
-                                    let status = nevpnconn.status
-                                    self?.onVpnStatusChanged(notification: status)
-                                }
+                                // ensure observer exists (removes old one if present)
+                                self.installVpnStatusObserver()
                                 
+                                // start the tunnel with username/password options if provided
                                 if username != nil && password != nil{
                                     let options: [String : NSObject] = [
                                         "username": username! as NSString,
@@ -253,6 +286,8 @@ class VPNUtils {
                         completion(error);
                     }
                 })
+            } else {
+                completion(error)
             }
         }
         
@@ -271,6 +306,81 @@ class VPNUtils {
                 }
             } catch {
             // some error
+            }
+        }
+    }
+    
+    func setAutoReconnect(enabled: Bool) {
+        self.autoReconnectEnabled = enabled
+        // If enabling, ensure we observe status so reconnect can trigger
+        if enabled {
+            self.installVpnStatusObserver()
+        }
+    }
+    
+    private func handleReconnectionIfNeeded(status: NEVPNStatus) {
+        switch status {
+        case .disconnected, .invalid:
+            // only auto-reconnect for unexpected disconnects and if enabled
+            if autoReconnectEnabled && !userInitiatedDisconnect {
+                scheduleReconnect()
+            }
+        case .connected:
+            // clear reconnect state
+            isReconnecting = false
+        default:
+            break
+        }
+    }
+    
+    private func scheduleReconnect() {
+        guard !isReconnecting else { return }
+        isReconnecting = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + reconnectDelay) { [weak self] in
+            guard let self = self else { return }
+            self.isReconnecting = false
+            // double-check conditions before reconnecting
+            if !self.autoReconnectEnabled || self.userInitiatedDisconnect { return }
+            
+            NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
+                guard error == nil, let mgr = managers?.first else { return }
+                let conn = mgr.connection
+                // only try if still disconnected/invalid
+                if conn.status == .disconnected || conn.status == .invalid {
+                    // Extract stored username/password from providerConfiguration if present
+                    if let proto = mgr.protocolConfiguration as? NETunnelProviderProtocol,
+                       let pconf = proto.providerConfiguration {
+                        var options: [String: NSObject]? = nil
+                        if let uData = pconf["username"] as? Data,
+                           let pData = pconf["password"] as? Data {
+                            let uStr = String(data: uData, encoding: .utf8) ?? ""
+                            let pStr = String(data: pData, encoding: .utf8) ?? ""
+                            if uStr.count > 0 || pStr.count > 0 {
+                                options = [
+                                    "username": uStr as NSString,
+                                    "password": pStr as NSString
+                                ]
+                            }
+                        }
+                        do {
+                            if let options = options {
+                                try conn.startVPNTunnel(options: options)
+                            } else {
+                                try conn.startVPNTunnel()
+                            }
+                        } catch {
+                            // optionally implement backoff retry; keep it simple for now
+                            print("Auto-reconnect failed: \(error.localizedDescription)")
+                        }
+                    } else {
+                        // fallback: attempt start without options
+                        do {
+                            try conn.startVPNTunnel()
+                        } catch {
+                            print("Auto-reconnect (no config) failed: \(error.localizedDescription)")
+                        }
+                    }
+                }
             }
         }
     }
