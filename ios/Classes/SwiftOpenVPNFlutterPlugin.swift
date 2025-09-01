@@ -210,15 +210,31 @@ class VPNUtils {
 
     func onVpnStatusChanged(notification: NEVPNStatus) {
         switch notification {
-        case NEVPNStatus.connected:
-            stage?("connected")
-            self.shouldBeConnected = true
-            self.saveVPNState()
-            self.cancelReconnectTimer()
-            break
-        case NEVPNStatus.connecting:
-            stage?("connecting")
-            break
+          case NEVPNStatus.connected:
+        // Check if this connection was authorized by the app
+        if !self.shouldBeConnected {
+            // This was an unauthorized connection (from Settings/Control Center)
+            // Immediately disconnect it
+            self.isManualDisconnect = true // Prevent auto-reconnect
+            self.providerManager.connection.stopVPNTunnel()
+            stage?("disconnected")
+            return
+        }
+        stage?("connected")
+        self.shouldBeConnected = true
+        self.saveVPNState()
+        self.cancelReconnectTimer()
+        break
+    case NEVPNStatus.connecting:
+        // Check if this connecting attempt was authorized
+        if !self.shouldBeConnected {
+            // Unauthorized connection attempt, stop it
+            self.isManualDisconnect = true
+            self.providerManager.connection.stopVPNTunnel()
+            return
+        }
+        stage?("connecting")
+        break
         case NEVPNStatus.disconnected:
             stage?("disconnected")
             self.handleDisconnection()
