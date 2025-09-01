@@ -14,14 +14,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
         let instance = SwiftOpenVPNFlutterPlugin()
         instance.onRegister(registrar)
     }
-private func saveVPNState() {
-    let userDefaults = UserDefaults(suiteName: self.groupIdentifier)
-    userDefaults?.set(self.shouldBeConnected, forKey: "vpn_should_be_connected")
-    userDefaults?.set(self.appInitiatedConnection, forKey: "app_initiated_connection")
-    // Add this line to save auto-reconnect setting
-    userDefaults?.set(self.autoReconnectEnabled, forKey: "auto_reconnect_enabled")
-    userDefaults?.synchronize()
-}
+
     public func onRegister(_ registrar: FlutterPluginRegistrar) {
         let vpnControlM = FlutterMethodChannel(
             name: SwiftOpenVPNFlutterPlugin.METHOD_CHANNEL_VPN_CONTROL,
@@ -226,12 +219,14 @@ class VPNUtils {
         }
     }
 
-    private func saveVPNState() {
-        let userDefaults = UserDefaults(suiteName: self.groupIdentifier)
-        userDefaults?.set(self.shouldBeConnected, forKey: "vpn_should_be_connected")
-        userDefaults?.set(self.appInitiatedConnection, forKey: "app_initiated_connection")
-        userDefaults?.synchronize()
-    }
+  private func saveVPNState() {
+    let userDefaults = UserDefaults(suiteName: self.groupIdentifier)
+    userDefaults?.set(self.shouldBeConnected, forKey: "vpn_should_be_connected")
+    userDefaults?.set(self.appInitiatedConnection, forKey: "app_initiated_connection")
+    // Add this line to save auto-reconnect setting
+    userDefaults?.set(self.autoReconnectEnabled, forKey: "auto_reconnect_enabled")
+    userDefaults?.synchronize()
+}
 
     // NEW: Monitor for unauthorized connections every 2 seconds
     private func startConnectionMonitoring() {
