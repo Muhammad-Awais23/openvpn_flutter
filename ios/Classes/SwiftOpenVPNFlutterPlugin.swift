@@ -103,7 +103,6 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                             details: nil))
                     return
                 }
-
                 let config: String? = (call.arguments as? [String: Any])?["config"] as? String
                 let username: String? = (call.arguments as? [String: Any])?["username"] as? String
                 let password: String? = (call.arguments as? [String: Any])?["password"] as? String
@@ -398,7 +397,7 @@ class VPNUtils {
             return "disconnected"
         }
     }
-    // Add this method to your VPNUtils class to enable On-Demand VPN
+    // ADD this method to your VPNUtils class (keep your existing configureVPN method too!)
     func configureOnDemandVPN(
         config: String?,
         username: String?,
@@ -407,7 +406,7 @@ class VPNUtils {
     ) {
         let configData = config
 
-        // Store connection details
+        // Store connection details for potential reconnection
         self.lastConfig = config
         self.lastUsername = username
         self.lastPassword = password
@@ -433,19 +432,17 @@ class VPNUtils {
 
                 tunnelProtocol.disconnectOnSleep = false
 
-                // 🔥 THE KEY: Configure On-Demand rules to prevent manual disconnect
-                let onDemandRule = NEOnDemandRuleConnect()
-                onDemandRule.interfaceTypeMatch = .any
-
-                // This rule means: "Always connect when any network interface is available"
-                tunnelProtocol.onDemandRules = [onDemandRule]
-                tunnelProtocol.onDemandEnabled = true
-
+                // Set the protocol configuration first
                 self.providerManager.protocolConfiguration = tunnelProtocol
                 self.providerManager.localizedDescription = self.localizedDescription
                 self.providerManager.isEnabled = true
 
-                // Enable on-demand for the entire manager
+                // 🔥 FIXED: Configure On-Demand rules on the MANAGER, not the protocol
+                let onDemandRule = NEOnDemandRuleConnect()
+                onDemandRule.interfaceTypeMatch = .any
+
+                // Set on-demand rules on the provider manager
+                self.providerManager.onDemandRules = [onDemandRule]
                 self.providerManager.isOnDemandEnabled = true
 
                 self.providerManager.saveToPreferences(completionHandler: { (error) in
@@ -501,49 +498,124 @@ class VPNUtils {
             }
         }
     }
+    func configureVPN(
+        config: String?,
+        username: String?,
+        password: String?,
+        completion: @escaping (_ error: Error?) -> Void = { _ in }
+    ) {
+        let configData = config
 
-    // Modified stopVPN to disable on-demand when manually disconnecting
+        // Store connection details for potential reconnection
+        self.lastConfig = config
+        self.lastUsername = username
+        self.lastPassword = password
+
+        // IMPORTANT: Mark this as app-initiated connection BEFORE starting
+        self.appInitiatedConnection = true
+        self.shouldBeConnected = true
+        self.saveVPNState()
+
+        self.providerManager?.loadFromPreferences { error in
+            if error == nil {
+                let tunnelProtocol = NETunnelProviderProtocol()
+                tunnelProtocol.serverAddress = ""
+                tunnelProtocol.providerBundleIdentifier = self.providerBundleIdentifier
+                let nullData = "".data(using: .utf8)
+                tunnelProtocol.providerConfiguration = [
+                    "config": configData?.data(using: .utf8) ?? nullData!,
+                    "groupIdentifier": self.groupIdentifier?.data(using: .utf8) ?? nullData!,
+                    "username": username?.data(using: .utf8) ?? nullData!,
+                    "password": password?.data(using: .utf8) ?? nullData!,
+                ]
+                tunnelProtocol.disconnectOnSleep = false
+                self.providerManager.protocolConfiguration = tunnelProtocol
+                self.providerManager.localizedDescription = self.localizedDescription
+                self.providerManager.isEnabled = true
+
+                self.providerManager.saveToPreferences(completionHandler: { (error) in
+                    if error == nil {
+                        self.providerManager.loadFromPreferences(completionHandler: { (error) in
+                            if error != nil {
+                                completion(error)
+                                return
+                            }
+                            do {
+                                if self.vpnStageObserver != nil {
+                                    NotificationCenter.default.removeObserver(
+                                        self.vpnStageObserver!,
+                                        name: NSNotification.Name.NEVPNStatusDidChange,
+                                        object: nil)
+                                }
+                                self.vpnStageObserver = NotificationCenter.default.addObserver(
+                                    forName: NSNotification.Name.NEVPNStatusDidChange,
+                                    object: nil,
+                                    queue: nil
+                                ) { [weak self] notification in
+                                    let nevpnconn = notification.object as! NEVPNConnection
+                                    let status = nevpnconn.status
+                                    self?.onVpnStatusChanged(notification: status)
+                                }
+
+                                if username != nil && password != nil {
+                                    let options: [String: NSObject] = [
+                                        "username": username! as NSString,
+                                        "password": password! as NSString,
+                                    ]
+                                    try self.providerManager.connection.startVPNTunnel(
+                                        options: options)
+                                } else {
+                                    try self.providerManager.connection.startVPNTunnel()
+                                }
+                                completion(nil)
+                            } catch let error {
+                                self.stopVPN()
+                                print("Error info: \(error)")
+                                completion(error)
+                            }
+                        })
+                    } else {
+                        completion(error)
+                    }
+                })
+            } else {
+                completion(error)
+            }
+        }
+    }
+
     func stopVPN() {
-        // Mark as manual disconnect
+        // Mark this as a manual disconnect to prevent auto-reconnect
         self.isManualDisconnect = true
         self.shouldBeConnected = false
         self.appInitiatedConnection = false
         self.saveVPNState()
         self.cancelReconnectTimer()
 
-        // IMPORTANT: Disable on-demand to allow manual disconnect
+        // 🔥 CRITICAL: Disable on-demand to allow proper disconnect
         self.providerManager?.isOnDemandEnabled = false
         self.providerManager?.saveToPreferences { [weak self] error in
             if error == nil {
                 self?.providerManager?.connection.stopVPNTunnel()
             } else {
                 print("Error disabling on-demand: \(error?.localizedDescription ?? "Unknown")")
+                // Still try to disconnect even if saving preferences failed
                 self?.providerManager?.connection.stopVPNTunnel()
             }
         }
     }
 
-    // func stopVPN() {
-    //     // Mark this as a manual disconnect to prevent auto-reconnect
-    //     self.isManualDisconnect = true
-    //     self.shouldBeConnected = false
-    //     self.appInitiatedConnection = false
-    //     self.saveVPNState()
-    //     self.cancelReconnectTimer()
-    //     self.providerManager.connection.stopVPNTunnel()
-    // }
-
-    // func getTraffictStats() {
-    //     if let session = self.providerManager?.connection as? NETunnelProviderSession {
-    //         do {
-    //             try session.sendProviderMessage("OPENVPN_STATS".data(using: .utf8)!) { (data) in
-    //                 //Do nothing
-    //             }
-    //         } catch {
-    //             // some error
-    //         }
-    //     }
-    // }
+    func getTraffictStats() {
+        if let session = self.providerManager?.connection as? NETunnelProviderSession {
+            do {
+                try session.sendProviderMessage("OPENVPN_STATS".data(using: .utf8)!) { (data) in
+                    //Do nothing
+                }
+            } catch {
+                // some error
+            }
+        }
+    }
 
     func dispose() {
         self.cancelReconnectTimer()
