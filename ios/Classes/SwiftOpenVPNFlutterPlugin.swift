@@ -169,6 +169,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
 class VPNUtils {
     var providerManager: NETunnelProviderManager!
     var providerBundleIdentifier: String?
+    private var heartbeatTimer: Timer?
     var localizedDescription: String?
     var groupIdentifier: String?
     var stage: FlutterEventSink!
@@ -186,7 +187,37 @@ class VPNUtils {
     // NEW: Track if connection was initiated by app
     private var appInitiatedConnection: Bool = false
     private var connectionMonitorTimer: Timer?
-
+    func loadProviderManager(completion: @escaping (_ error: Error?) -> Void) {
+        NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
+            if error == nil {
+                self.providerManager = managers?.first ?? NETunnelProviderManager()
+                self.checkInitialVPNState()
+                self.startConnectionMonitoring()
+                // NEW: Start heartbeat when manager loads
+                self.startAppHeartbeat()
+                completion(nil)
+            } else {
+                completion(error)
+            }
+        }
+    }
+    private func startAppHeartbeat() {
+        self.heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) {
+            [weak self] _ in
+            self?.sendHeartbeatToExtension()
+        }
+    }
+    private func sendHeartbeatToExtension() {
+        if let session = self.providerManager?.connection as? NETunnelProviderSession {
+            do {
+                try session.sendProviderMessage("APP_HEARTBEAT".data(using: .utf8)!) { _ in
+                    // Heartbeat sent successfully
+                }
+            } catch {
+                // Silently handle heartbeat errors
+            }
+        }
+    }
     func loadProviderManager(completion: @escaping (_ error: Error?) -> Void) {
         NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
             if error == nil {
@@ -431,17 +462,12 @@ class VPNUtils {
                 ]
 
                 tunnelProtocol.disconnectOnSleep = false
-
-                // Set the protocol configuration first
                 self.providerManager.protocolConfiguration = tunnelProtocol
                 self.providerManager.localizedDescription = self.localizedDescription
                 self.providerManager.isEnabled = true
 
-                // 🔥 FIXED: Configure On-Demand rules on the MANAGER, not the protocol
                 let onDemandRule = NEOnDemandRuleConnect()
                 onDemandRule.interfaceTypeMatch = .any
-
-                // Set on-demand rules on the provider manager
                 self.providerManager.onDemandRules = [onDemandRule]
                 self.providerManager.isOnDemandEnabled = true
 
@@ -592,19 +618,17 @@ class VPNUtils {
         self.saveVPNState()
         self.cancelReconnectTimer()
 
-        // 🔥 CRITICAL: Disable on-demand to allow proper disconnect
+        // Disable on-demand to allow proper disconnect
         self.providerManager?.isOnDemandEnabled = false
         self.providerManager?.saveToPreferences { [weak self] error in
             if error == nil {
                 self?.providerManager?.connection.stopVPNTunnel()
             } else {
                 print("Error disabling on-demand: \(error?.localizedDescription ?? "Unknown")")
-                // Still try to disconnect even if saving preferences failed
                 self?.providerManager?.connection.stopVPNTunnel()
             }
         }
     }
-
     func getTraffictStats() {
         if let session = self.providerManager?.connection as? NETunnelProviderSession {
             do {
@@ -621,6 +645,10 @@ class VPNUtils {
         self.cancelReconnectTimer()
         self.connectionMonitorTimer?.invalidate()
         self.connectionMonitorTimer = nil
+
+        // NEW: Stop heartbeat when disposing
+        self.heartbeatTimer?.invalidate()
+        self.heartbeatTimer = nil
 
         if self.vpnStageObserver != nil {
             NotificationCenter.default.removeObserver(
