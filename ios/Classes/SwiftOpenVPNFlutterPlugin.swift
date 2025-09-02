@@ -103,6 +103,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                             details: nil))
                     return
                 }
+
                 let config: String? = (call.arguments as? [String: Any])?["config"] as? String
                 let username: String? = (call.arguments as? [String: Any])?["username"] as? String
                 let password: String? = (call.arguments as? [String: Any])?["password"] as? String
@@ -116,7 +117,7 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                     return
                 }
 
-                SwiftOpenVPNFlutterPlugin.utils.configureVPN(
+                SwiftOpenVPNFlutterPlugin.utils.configureOnDemandVPN(
                     config: config,
                     username: username,
                     password: password,
@@ -219,14 +220,14 @@ class VPNUtils {
         }
     }
 
-  private func saveVPNState() {
-    let userDefaults = UserDefaults(suiteName: self.groupIdentifier)
-    userDefaults?.set(self.shouldBeConnected, forKey: "vpn_should_be_connected")
-    userDefaults?.set(self.appInitiatedConnection, forKey: "app_initiated_connection")
-    // Add this line to save auto-reconnect setting
-    userDefaults?.set(self.autoReconnectEnabled, forKey: "auto_reconnect_enabled")
-    userDefaults?.synchronize()
-}
+    private func saveVPNState() {
+        let userDefaults = UserDefaults(suiteName: self.groupIdentifier)
+        userDefaults?.set(self.shouldBeConnected, forKey: "vpn_should_be_connected")
+        userDefaults?.set(self.appInitiatedConnection, forKey: "app_initiated_connection")
+        // Add this line to save auto-reconnect setting
+        userDefaults?.set(self.autoReconnectEnabled, forKey: "auto_reconnect_enabled")
+        userDefaults?.synchronize()
+    }
 
     // NEW: Monitor for unauthorized connections every 2 seconds
     private func startConnectionMonitoring() {
@@ -397,8 +398,8 @@ class VPNUtils {
             return "disconnected"
         }
     }
-
-    func configureVPN(
+    // Add this method to your VPNUtils class to enable On-Demand VPN
+    func configureOnDemandVPN(
         config: String?,
         username: String?,
         password: String?,
@@ -406,12 +407,12 @@ class VPNUtils {
     ) {
         let configData = config
 
-        // Store connection details for potential reconnection
+        // Store connection details
         self.lastConfig = config
         self.lastUsername = username
         self.lastPassword = password
 
-        // IMPORTANT: Mark this as app-initiated connection BEFORE starting
+        // Mark as app-initiated
         self.appInitiatedConnection = true
         self.shouldBeConnected = true
         self.saveVPNState()
@@ -421,6 +422,7 @@ class VPNUtils {
                 let tunnelProtocol = NETunnelProviderProtocol()
                 tunnelProtocol.serverAddress = ""
                 tunnelProtocol.providerBundleIdentifier = self.providerBundleIdentifier
+
                 let nullData = "".data(using: .utf8)
                 tunnelProtocol.providerConfiguration = [
                     "config": configData?.data(using: .utf8) ?? nullData!,
@@ -428,10 +430,23 @@ class VPNUtils {
                     "username": username?.data(using: .utf8) ?? nullData!,
                     "password": password?.data(using: .utf8) ?? nullData!,
                 ]
+
                 tunnelProtocol.disconnectOnSleep = false
+
+                // 🔥 THE KEY: Configure On-Demand rules to prevent manual disconnect
+                let onDemandRule = NEOnDemandRuleConnect()
+                onDemandRule.interfaceTypeMatch = .any
+
+                // This rule means: "Always connect when any network interface is available"
+                tunnelProtocol.onDemandRules = [onDemandRule]
+                tunnelProtocol.onDemandEnabled = true
+
                 self.providerManager.protocolConfiguration = tunnelProtocol
                 self.providerManager.localizedDescription = self.localizedDescription
                 self.providerManager.isEnabled = true
+
+                // Enable on-demand for the entire manager
+                self.providerManager.isOnDemandEnabled = true
 
                 self.providerManager.saveToPreferences(completionHandler: { (error) in
                     if error == nil {
@@ -440,6 +455,7 @@ class VPNUtils {
                                 completion(error)
                                 return
                             }
+
                             do {
                                 if self.vpnStageObserver != nil {
                                     NotificationCenter.default.removeObserver(
@@ -447,6 +463,7 @@ class VPNUtils {
                                         name: NSNotification.Name.NEVPNStatusDidChange,
                                         object: nil)
                                 }
+
                                 self.vpnStageObserver = NotificationCenter.default.addObserver(
                                     forName: NSNotification.Name.NEVPNStatusDidChange,
                                     object: nil,
@@ -467,6 +484,7 @@ class VPNUtils {
                                 } else {
                                     try self.providerManager.connection.startVPNTunnel()
                                 }
+
                                 completion(nil)
                             } catch let error {
                                 self.stopVPN()
@@ -484,27 +502,48 @@ class VPNUtils {
         }
     }
 
+    // Modified stopVPN to disable on-demand when manually disconnecting
     func stopVPN() {
-        // Mark this as a manual disconnect to prevent auto-reconnect
+        // Mark as manual disconnect
         self.isManualDisconnect = true
         self.shouldBeConnected = false
         self.appInitiatedConnection = false
         self.saveVPNState()
         self.cancelReconnectTimer()
-        self.providerManager.connection.stopVPNTunnel()
-    }
 
-    func getTraffictStats() {
-        if let session = self.providerManager?.connection as? NETunnelProviderSession {
-            do {
-                try session.sendProviderMessage("OPENVPN_STATS".data(using: .utf8)!) { (data) in
-                    //Do nothing
-                }
-            } catch {
-                // some error
+        // IMPORTANT: Disable on-demand to allow manual disconnect
+        self.providerManager?.isOnDemandEnabled = false
+        self.providerManager?.saveToPreferences { [weak self] error in
+            if error == nil {
+                self?.providerManager?.connection.stopVPNTunnel()
+            } else {
+                print("Error disabling on-demand: \(error?.localizedDescription ?? "Unknown")")
+                self?.providerManager?.connection.stopVPNTunnel()
             }
         }
     }
+
+    // func stopVPN() {
+    //     // Mark this as a manual disconnect to prevent auto-reconnect
+    //     self.isManualDisconnect = true
+    //     self.shouldBeConnected = false
+    //     self.appInitiatedConnection = false
+    //     self.saveVPNState()
+    //     self.cancelReconnectTimer()
+    //     self.providerManager.connection.stopVPNTunnel()
+    // }
+
+    // func getTraffictStats() {
+    //     if let session = self.providerManager?.connection as? NETunnelProviderSession {
+    //         do {
+    //             try session.sendProviderMessage("OPENVPN_STATS".data(using: .utf8)!) { (data) in
+    //                 //Do nothing
+    //             }
+    //         } catch {
+    //             // some error
+    //         }
+    //     }
+    // }
 
     func dispose() {
         self.cancelReconnectTimer()
