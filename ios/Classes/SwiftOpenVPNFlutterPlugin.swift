@@ -1,650 +1,246 @@
-import Flutter
 import NetworkExtension
-import UIKit
+import OpenVPNAdapter
+import UserNotifications
+import os.log
 
-public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
-    private static var utils: VPNUtils! = VPNUtils()
-    private static var EVENT_CHANNEL_VPN_STAGE = "id.laskarmedia.openvpn_flutter/vpnstage"
-    private static var METHOD_CHANNEL_VPN_CONTROL = "id.laskarmedia.openvpn_flutter/vpncontrol"
+extension NEPacketTunnelFlow: @retroactive OpenVPNAdapterPacketFlow {}
 
-    public static var stage: FlutterEventSink?
-    private var initialized: Bool = false
+class PacketTunnelProvider: NEPacketTunnelProvider {
 
-    public static func register(with registrar: FlutterPluginRegistrar) {
-        let instance = SwiftOpenVPNFlutterPlugin()
-        instance.onRegister(registrar)
-    }
+    lazy var vpnAdapter: OpenVPNAdapter = {
+        let adapter = OpenVPNAdapter()
+        adapter.delegate = self
+        return adapter
+    }()
 
-    public func onRegister(_ registrar: FlutterPluginRegistrar) {
-        let vpnControlM = FlutterMethodChannel(
-            name: SwiftOpenVPNFlutterPlugin.METHOD_CHANNEL_VPN_CONTROL,
-            binaryMessenger: registrar.messenger())
-        let vpnStageE = FlutterEventChannel(
-            name: SwiftOpenVPNFlutterPlugin.EVENT_CHANNEL_VPN_STAGE,
-            binaryMessenger: registrar.messenger())
+    let vpnReachability = OpenVPNReachability()
 
-        vpnStageE.setStreamHandler(StageHandler())
+    var startHandler: ((Error?) -> Void)?
+    var stopHandler: (() -> Void)?
+    var groupIdentifier: String?
 
-        vpnControlM.setMethodCallHandler({
-            (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
-            switch call.method {
-            case "status":
-                SwiftOpenVPNFlutterPlugin.utils.getTraffictStats()
-                result(
-                    UserDefaults.init(suiteName: SwiftOpenVPNFlutterPlugin.utils.groupIdentifier)?
-                        .string(forKey: "connectionUpdate"))
-                break
-            case "stage":
-                result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
-                break
-            case "initialize":
-                let providerBundleIdentifier: String? =
-                    (call.arguments as? [String: Any])?["providerBundleIdentifier"] as? String
-                let localizedDescription: String? =
-                    (call.arguments as? [String: Any])?["localizedDescription"] as? String
-                let groupIdentifier: String? =
-                    (call.arguments as? [String: Any])?["groupIdentifier"] as? String
-                let autoReconnect: Bool =
-                    (call.arguments as? [String: Any])?["autoReconnect"] as? Bool ?? false
+    static var timeOutEnabled = true
+    var userInitiatedDisconnect = false
 
-                if providerBundleIdentifier == nil {
-                    result(
-                        FlutterError(
-                            code: "-2",
-                            message: "providerBundleIdentifier content empty or null",
-                            details: nil))
-                    return
-                }
-                if localizedDescription == nil {
-                    result(
-                        FlutterError(
-                            code: "-3",
-                            message: "localizedDescription content empty or null",
-                            details: nil))
-                    return
-                }
-                if groupIdentifier == nil {
-                    result(
-                        FlutterError(
-                            code: "-4",
-                            message: "groupIdentifier content empty or null",
-                            details: nil))
-                    return
-                }
+    override func startTunnel(
+        options: [String: NSObject]?,
+        completionHandler: @escaping (Error?) -> Void
+    ) {
+        guard let protocolConfiguration = protocolConfiguration as? NETunnelProviderProtocol,
+            let providerConfiguration = protocolConfiguration.providerConfiguration
+        else {
+            fatalError()
+        }
 
-                SwiftOpenVPNFlutterPlugin.utils.groupIdentifier = groupIdentifier
-                SwiftOpenVPNFlutterPlugin.utils.localizedDescription = localizedDescription
-                SwiftOpenVPNFlutterPlugin.utils.providerBundleIdentifier = providerBundleIdentifier
-                SwiftOpenVPNFlutterPlugin.utils.autoReconnectEnabled = autoReconnect
+        guard let groupIdentifierData: Data = providerConfiguration["groupIdentifier"] as? Data
+        else {
+            fatalError()
+        }
 
-                SwiftOpenVPNFlutterPlugin.utils.loadProviderManager { (err: Error?) in
-                    if err == nil {
-                        result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
-                    } else {
-                        result(
-                            FlutterError(
-                                code: "-4",
-                                message: err?.localizedDescription,
-                                details: err?.localizedDescription))
-                    }
-                }
-                self.initialized = true
-                break
-            case "disconnect":
-                SwiftOpenVPNFlutterPlugin.utils.stopVPN()
-                result(nil)
-                break
-            case "connect":
-                if !self.initialized {
-                    result(
-                        FlutterError(
-                            code: "-1",
-                            message: "VPNEngine need to be initialize",
-                            details: nil))
-                    return
-                }
-                let config: String? = (call.arguments as? [String: Any])?["config"] as? String
-                let username: String? = (call.arguments as? [String: Any])?["username"] as? String
-                let password: String? = (call.arguments as? [String: Any])?["password"] as? String
+        self.groupIdentifier = String(decoding: groupIdentifierData, as: UTF8.self)
 
-                if config == nil {
-                    result(
-                        FlutterError(
-                            code: "-2",
-                            message: "Config is empty or nulled",
-                            details: "Config can't be nulled"))
-                    return
-                }
+        // If we reach this point, configuration exists, which means app is running
+        // Since we remove configurations when app is killed, this should only run when app is active
 
-                SwiftOpenVPNFlutterPlugin.utils.configureOnDemandVPN(
-                    config: config,
-                    username: username,
-                    password: password,
-                    completion: { (success: Error?) -> Void in
-                        if success == nil {
-                            result(nil)
-                        } else {
-                            result(
-                                FlutterError(
-                                    code: "99",
-                                    message: "permission denied",
-                                    details: success?.localizedDescription))
-                        }
-                    })
-                break
-            case "setAutoReconnect":
-                let autoReconnect: Bool =
-                    (call.arguments as? [String: Any])?["enabled"] as? Bool ?? false
-                SwiftOpenVPNFlutterPlugin.utils.autoReconnectEnabled = autoReconnect
-                result(nil)
-                break
-            case "dispose":
-                self.initialized = false
-                SwiftOpenVPNFlutterPlugin.utils.dispose()
-                result(nil)
-                break
-            default:
-                result(FlutterMethodNotImplemented)
-                break
+        guard let ovpnFileContent: Data = providerConfiguration["config"] as? Data else {
+            fatalError()
+        }
+
+        let configuration = OpenVPNConfiguration()
+        configuration.fileContent = ovpnFileContent
+        configuration.tunPersist = false
+
+        let properties: OpenVPNConfigurationEvaluation
+        do {
+            properties = try vpnAdapter.apply(configuration: configuration)
+        } catch {
+            completionHandler(error)
+            return
+        }
+
+        if !properties.autologin {
+            guard let username = options?["username"] as? String,
+                let password = options?["password"] as? String
+            else {
+                fatalError()
             }
-        })
+
+            let credentials = OpenVPNCredentials()
+            credentials.username = username
+            credentials.password = password
+
+            do {
+                try vpnAdapter.provide(credentials: credentials)
+            } catch {
+                completionHandler(error)
+                return
+            }
+        }
+
+        vpnReachability.startTracking { [weak self] status in
+            guard status == .reachableViaWiFi else { return }
+            self?.vpnAdapter.reconnect(afterTimeInterval: 5)
+        }
+
+        startHandler = completionHandler
+        vpnAdapter.connect(using: packetFlow)
     }
 
-    class StageHandler: NSObject, FlutterStreamHandler {
-        func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink)
-            -> FlutterError?
-        {
-            SwiftOpenVPNFlutterPlugin.utils.stage = events
-            return nil
-        }
+    override func stopTunnel(
+        with reason: NEProviderStopReason,
+        completionHandler: @escaping () -> Void
+    ) {
+        stopHandler = completionHandler
+        vpnReachability.isTracking ? vpnReachability.stopTracking() : nil
+        userInitiatedDisconnect = true
+        vpnAdapter.disconnect()
+    }
 
-        func onCancel(withArguments arguments: Any?) -> FlutterError? {
-            SwiftOpenVPNFlutterPlugin.utils.stage = nil
-            return nil
+    override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil)
+    {
+        if String(data: messageData, encoding: .utf8) == "OPENVPN_STATS" {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+
+            var toSave = ""
+            toSave +=
+                UserDefaults.init(suiteName: groupIdentifier)?.string(forKey: "connected_on") ?? ""
+            toSave += "_\(vpnAdapter.interfaceStatistics.packetsIn)"
+            toSave += "_\(vpnAdapter.interfaceStatistics.packetsOut)"
+            toSave += "_\(vpnAdapter.interfaceStatistics.bytesIn)"
+            toSave += "_\(vpnAdapter.interfaceStatistics.bytesOut)"
+
+            UserDefaults.init(suiteName: groupIdentifier)?.setValue(
+                toSave, forKey: "connectionUpdate")
         }
+    }
+
+    func scheduleVpnExpiredNotification(after seconds: Int) {
+        let content = UNMutableNotificationContent()
+        content.title = "VPN disconnected"
+        content.body = "Your free minutes have been consumed"
+        content.sound = .default
+        content.categoryIdentifier = "vpn_expired"
+        content.userInfo = ["fromVPN": true]
+
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: TimeInterval(seconds), repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "vpn_limit_expired", content: content, trigger: trigger)
+
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                os_log("Failed to schedule notification: %@", error.localizedDescription)
+            } else {
+                os_log("Notification scheduled after %d seconds", seconds)
+            }
+        }
+    }
+
+    func cancelVpnExpiredNotification() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [
+            "vpn_limit_expired"
+        ])
     }
 }
 
-@available(iOS 9.0, *)
-class VPNUtils {
-    var providerManager: NETunnelProviderManager!
-    var providerBundleIdentifier: String?
-    private var heartbeatTimer: Timer?
-    var localizedDescription: String?
-    var groupIdentifier: String?
-    var stage: FlutterEventSink!
-    var vpnStageObserver: NSObjectProtocol?
-    var autoReconnectEnabled: Bool = false
+extension PacketTunnelProvider: OpenVPNAdapterDelegate {
 
-    // Track VPN state for auto-reconnect logic
-    private var shouldBeConnected: Bool = false
-    private var lastConfig: String?
-    private var lastUsername: String?
-    private var lastPassword: String?
-    private var isManualDisconnect: Bool = false
-    private var reconnectTimer: Timer?
-
-    // NEW: Track if connection was initiated by app
-    private var appInitiatedConnection: Bool = false
-    private var connectionMonitorTimer: Timer?
-    func loadProviderManager(completion: @escaping (_ error: Error?) -> Void) {
-        NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
-            if error == nil {
-                self.providerManager = managers?.first ?? NETunnelProviderManager()
-                self.checkInitialVPNState()
-                self.startConnectionMonitoring()
-                // NEW: Start heartbeat when manager loads
-                self.startAppHeartbeat()
-                completion(nil)
-            } else {
-                completion(error)
-            }
-        }
-    }
-    private func startAppHeartbeat() {
-        self.heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) {
-            [weak self] _ in
-            self?.sendHeartbeatToExtension()
-        }
-    }
-    private func sendHeartbeatToExtension() {
-        if let session = self.providerManager?.connection as? NETunnelProviderSession {
-            do {
-                try session.sendProviderMessage("APP_HEARTBEAT".data(using: .utf8)!) { _ in
-                    // Heartbeat sent successfully
-                }
-            } catch {
-                // Silently handle heartbeat errors
-            }
-        }
+    func openVPNAdapter(
+        _ openVPNAdapter: OpenVPNAdapter,
+        configureTunnelWithNetworkSettings networkSettings: NEPacketTunnelNetworkSettings?,
+        completionHandler: @escaping (Error?) -> Void
+    ) {
+        networkSettings?.dnsSettings?.matchDomains = [""]
+        setTunnelNetworkSettings(networkSettings, completionHandler: completionHandler)
     }
 
-    private func checkInitialVPNState() {
-        // Check UserDefaults to see if VPN was previously in a "should be connected" state
-        let userDefaults = UserDefaults(suiteName: self.groupIdentifier)
-        self.shouldBeConnected = userDefaults?.bool(forKey: "vpn_should_be_connected") ?? false
-        self.appInitiatedConnection =
-            userDefaults?.bool(forKey: "app_initiated_connection") ?? false
+    private func _updateEvent(_ event: OpenVPNAdapterEvent) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
 
-        if self.shouldBeConnected && self.autoReconnectEnabled {
-            // If VPN should be connected but isn't, attempt reconnect
-            if let currentStatus = self.providerManager?.connection.status,
-                currentStatus == .disconnected || currentStatus == .invalid
+        var stageValue = "INVALID"
+        switch event {
+        case .connected:
+            stageValue = "CONNECTED"
+            UserDefaults.init(suiteName: groupIdentifier)?.setValue(
+                formatter.string(from: Date.now), forKey: "connected_on")
+        case .disconnected:
+            stageValue = "DISCONNECTED"
+        case .connecting:
+            stageValue = "CONNECTING"
+        case .reconnecting:
+            stageValue = "RECONNECTING"
+        case .info:
+            stageValue = "CONNECTED"
+        default:
+            UserDefaults.init(suiteName: groupIdentifier)?.removeObject(forKey: "connected_on")
+        }
+
+        UserDefaults.init(suiteName: groupIdentifier)?.setValue(stageValue, forKey: "vpnStage")
+    }
+
+    func openVPNAdapter(
+        _ openVPNAdapter: OpenVPNAdapter,
+        handleEvent event: OpenVPNAdapterEvent,
+        message: String?
+    ) {
+        PacketTunnelProvider.timeOutEnabled = true
+        _updateEvent(event)
+
+        switch event {
+        case .connected:
+            PacketTunnelProvider.timeOutEnabled = false
+            userInitiatedDisconnect = false
+
+            // Handle time-limited connections
+            if let group = groupIdentifier,
+                let allowed = UserDefaults(suiteName: group)?.integer(
+                    forKey: "allowed_duration_seconds"),
+                allowed > 0
             {
-                self.attemptReconnect()
-            }
-        }
-    }
-
-    private func saveVPNState() {
-        let userDefaults = UserDefaults(suiteName: self.groupIdentifier)
-        userDefaults?.set(self.shouldBeConnected, forKey: "vpn_should_be_connected")
-        userDefaults?.set(self.appInitiatedConnection, forKey: "app_initiated_connection")
-        // Add this line to save auto-reconnect setting
-        userDefaults?.set(self.autoReconnectEnabled, forKey: "auto_reconnect_enabled")
-        userDefaults?.synchronize()
-    }
-
-    // NEW: Monitor for unauthorized connections every 2 seconds
-    private func startConnectionMonitoring() {
-        self.connectionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) {
-            [weak self] _ in
-            self?.checkForUnauthorizedConnection()
-        }
-    }
-
-    // NEW: Check if VPN is connected without app authorization
-    private func checkForUnauthorizedConnection() {
-        guard let status = self.providerManager?.connection.status else { return }
-
-        // If VPN is connected/connecting but app didn't initiate it, disconnect immediately
-        if (status == .connected || status == .connecting) && !self.appInitiatedConnection {
-            print(
-                "OpenVPN: Unauthorized connection detected from Settings/Control Center - Disconnecting"
-            )
-            self.forceDisconnect()
-        }
-    }
-
-    // NEW: Force disconnect without triggering auto-reconnect
-    private func forceDisconnect() {
-        self.isManualDisconnect = true
-        self.shouldBeConnected = false
-        self.appInitiatedConnection = false
-        self.saveVPNState()
-        self.cancelReconnectTimer()
-        self.providerManager?.connection.stopVPNTunnel()
-        self.stage?("disconnected")
-    }
-
-    func onVpnStatusChanged(notification: NEVPNStatus) {
-        switch notification {
-        case NEVPNStatus.connected:
-            // Only allow connection if app initiated it
-            if !self.appInitiatedConnection {
-                print("OpenVPN: Unauthorized connection attempt blocked")
-                self.forceDisconnect()
-                return
-            }
-
-            stage?("connected")
-            self.shouldBeConnected = true
-            self.saveVPNState()
-            self.cancelReconnectTimer()
-            break
-        case NEVPNStatus.connecting:
-            // Only allow connecting if app initiated it
-            if !self.appInitiatedConnection {
-                print("OpenVPN: Unauthorized connecting attempt blocked")
-                self.forceDisconnect()
-                return
-            }
-            stage?("connecting")
-            break
-        case NEVPNStatus.disconnected:
-            stage?("disconnected")
-            self.handleDisconnection()
-            break
-        case NEVPNStatus.disconnecting:
-            stage?("disconnecting")
-            break
-        case NEVPNStatus.invalid:
-            stage?("invalid")
-            self.handleDisconnection()
-            break
-        case NEVPNStatus.reasserting:
-            stage?("reasserting")
-            break
-        default:
-            stage?("null")
-            break
-        }
-    }
-
-    private func handleDisconnection() {
-        // Check if this was an unauthorized disconnection from Settings/Control Center
-        if self.appInitiatedConnection && self.shouldBeConnected && !self.isManualDisconnect {
-            // This was unauthorized disconnection - prevent it by reconnecting
-            if self.autoReconnectEnabled {
-                print("OpenVPN: Unauthorized disconnection detected - Auto-reconnecting")
-                self.scheduleReconnect()
-                return
-            }
-        }
-
-        // Only attempt reconnect if:
-        // 1. Auto-reconnect is enabled
-        // 2. VPN should be connected (was previously connected by user)
-        // 3. This wasn't a manual disconnect
-        // 4. We have the necessary connection details
-        if self.autoReconnectEnabled && self.shouldBeConnected && !self.isManualDisconnect
-            && self.lastConfig != nil
-        {
-            // Schedule reconnection attempt after a short delay
-            self.scheduleReconnect()
-        } else if self.isManualDisconnect {
-            // Reset manual disconnect flag and update state
-            self.isManualDisconnect = false
-            self.shouldBeConnected = false
-            self.appInitiatedConnection = false
-            self.saveVPNState()
-        }
-    }
-
-    private func scheduleReconnect() {
-        // Cancel any existing timer
-        self.cancelReconnectTimer()
-
-        // Schedule reconnection after 2 seconds
-        self.reconnectTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) {
-            [weak self] _ in
-            self?.attemptReconnect()
-        }
-    }
-
-    private func attemptReconnect() {
-        guard let config = self.lastConfig else { return }
-        print("OpenVPN: Attempting auto-reconnect...")
-
-        self.configureVPN(
-            config: config,
-            username: self.lastUsername,
-            password: self.lastPassword
-        ) { error in
-            if let error = error {
-                print("OpenVPN: Auto-reconnect failed: \(error.localizedDescription)")
-                // Could implement exponential backoff here if needed
-            } else {
-                print("OpenVPN: Auto-reconnect initiated successfully")
-            }
-        }
-    }
-
-    private func cancelReconnectTimer() {
-        self.reconnectTimer?.invalidate()
-        self.reconnectTimer = nil
-    }
-
-    func onVpnStatusChangedString(notification: NEVPNStatus?) -> String? {
-        if notification == nil {
-            return "disconnected"
-        }
-        switch notification! {
-        case NEVPNStatus.connected:
-            return "connected"
-        case NEVPNStatus.connecting:
-            return "connecting"
-        case NEVPNStatus.disconnected:
-            return "disconnected"
-        case NEVPNStatus.disconnecting:
-            return "disconnecting"
-        case NEVPNStatus.invalid:
-            return "invalid"
-        case NEVPNStatus.reasserting:
-            return "reasserting"
-        default:
-            return ""
-        }
-    }
-
-    func currentStatus() -> String? {
-        if self.providerManager != nil {
-            return onVpnStatusChangedString(notification: self.providerManager.connection.status)
-        } else {
-            return "disconnected"
-        }
-    }
-    // ADD this method to your VPNUtils class (keep your existing configureVPN method too!)
-    func configureOnDemandVPN(
-        config: String?,
-        username: String?,
-        password: String?,
-        completion: @escaping (_ error: Error?) -> Void = { _ in }
-    ) {
-        let configData = config
-
-        // Store connection details for potential reconnection
-        self.lastConfig = config
-        self.lastUsername = username
-        self.lastPassword = password
-
-        // Mark as app-initiated
-        self.appInitiatedConnection = true
-        self.shouldBeConnected = true
-        self.saveVPNState()
-
-        self.providerManager?.loadFromPreferences { error in
-            if error == nil {
-                let tunnelProtocol = NETunnelProviderProtocol()
-                tunnelProtocol.serverAddress = ""
-                tunnelProtocol.providerBundleIdentifier = self.providerBundleIdentifier
-
-                let nullData = "".data(using: .utf8)
-                tunnelProtocol.providerConfiguration = [
-                    "config": configData?.data(using: .utf8) ?? nullData!,
-                    "groupIdentifier": self.groupIdentifier?.data(using: .utf8) ?? nullData!,
-                    "username": username?.data(using: .utf8) ?? nullData!,
-                    "password": password?.data(using: .utf8) ?? nullData!,
-                ]
-
-                tunnelProtocol.disconnectOnSleep = false
-                self.providerManager.protocolConfiguration = tunnelProtocol
-                self.providerManager.localizedDescription = self.localizedDescription
-                self.providerManager.isEnabled = true
-
-                let onDemandRule = NEOnDemandRuleConnect()
-                onDemandRule.interfaceTypeMatch = .any
-                self.providerManager.onDemandRules = [onDemandRule]
-                self.providerManager.isOnDemandEnabled = true
-
-                self.providerManager.saveToPreferences(completionHandler: { (error) in
-                    if error == nil {
-                        self.providerManager.loadFromPreferences(completionHandler: { (error) in
-                            if error != nil {
-                                completion(error)
-                                return
-                            }
-
-                            do {
-                                if self.vpnStageObserver != nil {
-                                    NotificationCenter.default.removeObserver(
-                                        self.vpnStageObserver!,
-                                        name: NSNotification.Name.NEVPNStatusDidChange,
-                                        object: nil)
-                                }
-
-                                self.vpnStageObserver = NotificationCenter.default.addObserver(
-                                    forName: NSNotification.Name.NEVPNStatusDidChange,
-                                    object: nil,
-                                    queue: nil
-                                ) { [weak self] notification in
-                                    let nevpnconn = notification.object as! NEVPNConnection
-                                    let status = nevpnconn.status
-                                    self?.onVpnStatusChanged(notification: status)
-                                }
-
-                                if username != nil && password != nil {
-                                    let options: [String: NSObject] = [
-                                        "username": username! as NSString,
-                                        "password": password! as NSString,
-                                    ]
-                                    try self.providerManager.connection.startVPNTunnel(
-                                        options: options)
-                                } else {
-                                    try self.providerManager.connection.startVPNTunnel()
-                                }
-
-                                completion(nil)
-                            } catch let error {
-                                self.stopVPN()
-                                print("Error info: \(error)")
-                                completion(error)
-                            }
-                        })
-                    } else {
-                        completion(error)
-                    }
-                })
-            } else {
-                completion(error)
-            }
-        }
-    }
-    func configureVPN(
-        config: String?,
-        username: String?,
-        password: String?,
-        completion: @escaping (_ error: Error?) -> Void = { _ in }
-    ) {
-        let configData = config
-
-        // Store connection details for potential reconnection
-        self.lastConfig = config
-        self.lastUsername = username
-        self.lastPassword = password
-
-        // IMPORTANT: Mark this as app-initiated connection BEFORE starting
-        self.appInitiatedConnection = true
-        self.shouldBeConnected = true
-        self.saveVPNState()
-
-        self.providerManager?.loadFromPreferences { error in
-            if error == nil {
-                let tunnelProtocol = NETunnelProviderProtocol()
-                tunnelProtocol.serverAddress = ""
-                tunnelProtocol.providerBundleIdentifier = self.providerBundleIdentifier
-                let nullData = "".data(using: .utf8)
-                tunnelProtocol.providerConfiguration = [
-                    "config": configData?.data(using: .utf8) ?? nullData!,
-                    "groupIdentifier": self.groupIdentifier?.data(using: .utf8) ?? nullData!,
-                    "username": username?.data(using: .utf8) ?? nullData!,
-                    "password": password?.data(using: .utf8) ?? nullData!,
-                ]
-                tunnelProtocol.disconnectOnSleep = false
-                self.providerManager.protocolConfiguration = tunnelProtocol
-                self.providerManager.localizedDescription = self.localizedDescription
-                self.providerManager.isEnabled = true
-
-                self.providerManager.saveToPreferences(completionHandler: { (error) in
-                    if error == nil {
-                        self.providerManager.loadFromPreferences(completionHandler: { (error) in
-                            if error != nil {
-                                completion(error)
-                                return
-                            }
-                            do {
-                                if self.vpnStageObserver != nil {
-                                    NotificationCenter.default.removeObserver(
-                                        self.vpnStageObserver!,
-                                        name: NSNotification.Name.NEVPNStatusDidChange,
-                                        object: nil)
-                                }
-                                self.vpnStageObserver = NotificationCenter.default.addObserver(
-                                    forName: NSNotification.Name.NEVPNStatusDidChange,
-                                    object: nil,
-                                    queue: nil
-                                ) { [weak self] notification in
-                                    let nevpnconn = notification.object as! NEVPNConnection
-                                    let status = nevpnconn.status
-                                    self?.onVpnStatusChanged(notification: status)
-                                }
-
-                                if username != nil && password != nil {
-                                    let options: [String: NSObject] = [
-                                        "username": username! as NSString,
-                                        "password": password! as NSString,
-                                    ]
-                                    try self.providerManager.connection.startVPNTunnel(
-                                        options: options)
-                                } else {
-                                    try self.providerManager.connection.startVPNTunnel()
-                                }
-                                completion(nil)
-                            } catch let error {
-                                self.stopVPN()
-                                print("Error info: \(error)")
-                                completion(error)
-                            }
-                        })
-                    } else {
-                        completion(error)
-                    }
-                })
-            } else {
-                completion(error)
-            }
-        }
-    }
-
-    func stopVPN() {
-        // Mark this as a manual disconnect to prevent auto-reconnect
-        self.isManualDisconnect = true
-        self.shouldBeConnected = false
-        self.appInitiatedConnection = false
-        self.saveVPNState()
-        self.cancelReconnectTimer()
-
-        // Disable on-demand to allow proper disconnect
-        self.providerManager?.isOnDemandEnabled = false
-        self.providerManager?.saveToPreferences { [weak self] error in
-            if error == nil {
-                self?.providerManager?.connection.stopVPNTunnel()
-            } else {
-                print("Error disabling on-demand: \(error?.localizedDescription ?? "Unknown")")
-                self?.providerManager?.connection.stopVPNTunnel()
-            }
-        }
-    }
-    func getTraffictStats() {
-        if let session = self.providerManager?.connection as? NETunnelProviderSession {
-            do {
-                try session.sendProviderMessage("OPENVPN_STATS".data(using: .utf8)!) { (data) in
-                    //Do nothing
+                DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(allowed)) { [weak self] in
+                    self?.vpnAdapter.disconnect()
+                    self?.scheduleVpnExpiredNotification(after: 1)
                 }
-            } catch {
-                // some error
             }
+
+            startHandler?(nil)
+            startHandler = nil
+
+        case .disconnected:
+            PacketTunnelProvider.timeOutEnabled = false
+
+            if vpnReachability.isTracking {
+                vpnReachability.stopTracking()
+            }
+
+            stopHandler?()
+            stopHandler = nil
+
+        case .reconnecting:
+            break
+        default:
+            break
         }
     }
 
-    func dispose() {
-        self.cancelReconnectTimer()
-        self.connectionMonitorTimer?.invalidate()
-        self.connectionMonitorTimer = nil
+    func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, handleError error: Error) {
+        guard let fatal = (error as NSError).userInfo[OpenVPNAdapterErrorFatalKey] as? Bool,
+            fatal == true
+        else { return }
 
-        // NEW: Stop heartbeat when disposing
-        self.heartbeatTimer?.invalidate()
-        self.heartbeatTimer = nil
-
-        if self.vpnStageObserver != nil {
-            NotificationCenter.default.removeObserver(
-                self.vpnStageObserver!,
-                name: NSNotification.Name.NEVPNStatusDidChange,
-                object: nil)
-            self.vpnStageObserver = nil
+        if vpnReachability.isTracking {
+            vpnReachability.stopTracking()
         }
-        self.shouldBeConnected = false
-        self.appInitiatedConnection = false
-        self.saveVPNState()
+
+        if let startHandler = startHandler {
+            startHandler(error)
+            self.startHandler = nil
+        } else {
+            cancelTunnelWithError(error)
+        }
     }
+
+    func openVPNAdapter(_ openVPNAdapter: OpenVPNAdapter, handleLogMessage logMessage: String) {}
 }
