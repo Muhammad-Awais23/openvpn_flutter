@@ -218,20 +218,6 @@ class VPNUtils {
             }
         }
     }
-    func loadProviderManager(completion: @escaping (_ error: Error?) -> Void) {
-        NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
-            if error == nil {
-                self.providerManager = managers?.first ?? NETunnelProviderManager()
-                // Check if VPN was previously connected and should auto-reconnect
-                self.checkInitialVPNState()
-                // Start monitoring for unauthorized connections
-                self.startConnectionMonitoring()
-                completion(nil)
-            } else {
-                completion(error)
-            }
-        }
-    }
 
     private func checkInitialVPNState() {
         // Check UserDefaults to see if VPN was previously in a "should be connected" state
