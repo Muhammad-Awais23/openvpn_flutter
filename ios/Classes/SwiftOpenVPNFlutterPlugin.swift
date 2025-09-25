@@ -496,10 +496,55 @@ class VPNUtils {
         if let session = self.providerManager?.connection as? NETunnelProviderSession {
             do {
                 try session.sendProviderMessage("OPENVPN_STATS".data(using: .utf8)!) { (data) in
-                    //Do nothing
+                    // Process the returned data from handleAppMessage
+                    if let responseData = data,
+                        let statsString = String(data: responseData, encoding: .utf8)
+                    {
+
+                        // Parse the response: "2024-01-01 10:00:00_300_1234_5678_98765_43210"
+                        let components = statsString.components(separatedBy: "_")
+                        if components.count >= 6 {
+                            let connectedOn = components[0]
+                            let duration = Int(components[1]) ?? 0
+                            let packetsIn = UInt64(components[2]) ?? 0
+                            let packetsOut = UInt64(components[3]) ?? 0
+                            let bytesIn = UInt64(components[4]) ?? 0
+                            let bytesOut = UInt64(components[5]) ?? 0
+
+                            // Format duration as HH:MM:SS
+                            let hours = duration / 3600
+                            let minutes = (duration % 3600) / 60
+                            let seconds = duration % 60
+                            let formattedDuration = String(
+                                format: "%02d:%02d:%02d", hours, minutes, seconds)
+
+                            // Update UserDefaults with formatted data for Flutter to read
+                            if let groupDefaults = UserDefaults(suiteName: self.groupIdentifier) {
+                                let formattedStats = [
+                                    "connected_on": connectedOn,
+                                    "duration": formattedDuration,
+                                    "byte_in": bytesIn,
+                                    "byte_out": bytesOut,
+                                    "packets_in": packetsIn,
+                                    "packets_out": packetsOut,
+                                ]
+
+                                // Convert to JSON string for Flutter
+                                if let jsonData = try? JSONSerialization.data(
+                                    withJSONObject: formattedStats),
+                                    let jsonString = String(data: jsonData, encoding: .utf8)
+                                {
+                                    groupDefaults.setValue(jsonString, forKey: "connectionUpdate")
+                                    print("Updated stats: \(jsonString)")
+                                }
+                            }
+                        }
+                    } else {
+                        print("Failed to get VPN statistics")
+                    }
                 }
             } catch {
-                // some error
+                print("Error sending stats message: \(error)")
             }
         }
     }
