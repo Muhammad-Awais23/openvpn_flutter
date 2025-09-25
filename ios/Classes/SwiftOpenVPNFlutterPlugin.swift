@@ -168,7 +168,6 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
 @available(iOS 9.0, *)
 class VPNUtils {
     var providerManager: NETunnelProviderManager!
-    private var vpnStatusTimer: Timer?
     var providerBundleIdentifier: String?
     var localizedDescription: String?
     var groupIdentifier: String?
@@ -258,70 +257,6 @@ class VPNUtils {
         self.providerManager?.connection.stopVPNTunnel()
         self.stage?("disconnected")
     }
-    private func formatDuration(duration: TimeInterval) -> String {
-        let hours = Int(duration) / 3600
-        let minutes = (Int(duration) % 3600) / 60
-        let seconds = Int(duration) % 60
-        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
-    }
-
-    private func updateVpnStatus() {
-        guard let session = self.providerManager?.connection as? NETunnelProviderSession else {
-            return
-        }
-
-        do {
-            try session.sendProviderMessage("OPENVPN_STATS".data(using: .utf8)!) {
-                [weak self] data in
-                guard let self = self else { return }
-                guard let data = data else { return }
-
-                // Parse stats from data
-                if let statsString = String(data: data, encoding: .utf8),
-                    let statsData = statsString.data(using: .utf8),
-                    let json = try? JSONSerialization.jsonObject(with: statsData, options: [])
-                        as? [String: Any]
-                {
-
-                    let connectedOnString = json["connected_on"] as? String ?? ""
-                    let connectedOn = ISO8601DateFormatter().date(from: connectedOnString) ?? Date()
-                    let byteIn = json["byte_in"] as? String ?? "0"
-                    let byteOut = json["byte_out"] as? String ?? "0"
-
-                    // Calculate duration
-                    let duration = Date().timeIntervalSince(connectedOn)
-                    let durationStr = self.formatDuration(duration: duration)
-
-                    // Save to UserDefaults for Flutter to read
-                    let userDefaults = UserDefaults(suiteName: self.groupIdentifier)
-                    let connectionUpdate: [String: Any] = [
-                        "connectedOn": connectedOnString,
-                        "duration": durationStr,
-                        "byteIn": byteIn,
-                        "byteOut": byteOut,
-                    ]
-                    if let encoded = try? JSONSerialization.data(withJSONObject: connectionUpdate) {
-                        userDefaults?.set(
-                            String(data: encoded, encoding: .utf8), forKey: "connectionUpdate")
-                        userDefaults?.synchronize()
-                    }
-                }
-            }
-        } catch {
-            print("OpenVPN: Failed to request stats: \(error.localizedDescription)")
-        }
-    }
-
-    private func startVpnStatusTimer() {
-        // Cancel if already running
-        vpnStatusTimer?.invalidate()
-
-        // Fire every 1 second to update stats
-        vpnStatusTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) {
-            [weak self] _ in
-            self?.updateVpnStatus()
-        }
-    }
 
     func onVpnStatusChanged(notification: NEVPNStatus) {
         switch notification {
@@ -337,7 +272,6 @@ class VPNUtils {
             self.shouldBeConnected = true
             self.saveVPNState()
             self.cancelReconnectTimer()
-            self.startVpnStatusTimer()
             break
         case NEVPNStatus.connecting:
             // Only allow connecting if app initiated it
@@ -349,11 +283,8 @@ class VPNUtils {
             stage?("connecting")
             break
         case NEVPNStatus.disconnected:
-
             stage?("disconnected")
             self.handleDisconnection()
-            vpnStatusTimer?.invalidate()
-            vpnStatusTimer = nil
             break
         case NEVPNStatus.disconnecting:
             stage?("disconnecting")
@@ -361,8 +292,6 @@ class VPNUtils {
         case NEVPNStatus.invalid:
             stage?("invalid")
             self.handleDisconnection()
-            vpnStatusTimer?.invalidate()
-            vpnStatusTimer = nil
             break
         case NEVPNStatus.reasserting:
             stage?("reasserting")
@@ -560,10 +489,6 @@ class VPNUtils {
         self.appInitiatedConnection = false
         self.saveVPNState()
         self.cancelReconnectTimer()
-        // ✅ Stop VPN status timer
-        vpnStatusTimer?.invalidate()
-        vpnStatusTimer = nil
-
         self.providerManager.connection.stopVPNTunnel()
     }
 

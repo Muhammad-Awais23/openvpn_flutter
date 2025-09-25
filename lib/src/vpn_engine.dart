@@ -220,17 +220,40 @@ class OpenVPN {
           if (value == null) return VpnStatus.empty();
 
           if (Platform.isIOS) {
-            var splitted = value.split("_");
-            var connectedOn = DateTime.tryParse(splitted[0]);
-            if (connectedOn == null) return VpnStatus.empty();
-            return VpnStatus(
-              connectedOn: connectedOn,
-              duration: _duration(DateTime.now().difference(connectedOn).abs()),
-              packetsIn: splitted[1],
-              packetsOut: splitted[2],
-              byteIn: splitted[3],
-              byteOut: splitted[4],
-            );
+            try {
+              if (value == null || value.trim().isEmpty)
+                return VpnStatus.empty();
+
+              var splitted = value.split("_");
+
+              // Ensure array has at least 5 elements
+              while (splitted.length < 5) splitted.add("0");
+
+              var connectedOn = DateTime.tryParse(splitted[0]) ??
+                  _tempDateTime ??
+                  DateTime.now();
+
+              String packetsIn =
+                  splitted[1].trim().isEmpty ? "0" : splitted[1].trim();
+              String packetsOut =
+                  splitted[2].trim().isEmpty ? "0" : splitted[2].trim();
+              String byteIn =
+                  splitted[3].trim().isEmpty ? "0" : splitted[3].trim();
+              String byteOut =
+                  splitted[4].trim().isEmpty ? "0" : splitted[4].trim();
+
+              return VpnStatus(
+                connectedOn: connectedOn,
+                duration:
+                    _duration(DateTime.now().difference(connectedOn).abs()),
+                packetsIn: packetsIn,
+                packetsOut: packetsOut,
+                byteIn: byteIn,
+                byteOut: byteOut,
+              );
+            } catch (_) {
+              return VpnStatus.empty();
+            }
           } else if (Platform.isAndroid) {
             var data = jsonDecode(value);
             var connectedOn =
