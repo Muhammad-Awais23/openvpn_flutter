@@ -55,6 +55,12 @@ class OpenVPN {
   ///I know it was bad practice, but this is the only way to avoid android status duration having long delay
   Timer? _vpnStatusTimer;
 
+  ///Timer for connection timeout
+  Timer? _connectionTimeoutTimer;
+
+  ///Connection timeout duration (default: 20 seconds)
+  Duration _connectionTimeout = const Duration(seconds: 20);
+
   ///To indicate the engine already initialize
   bool initialized = false;
 
@@ -75,14 +81,19 @@ class OpenVPN {
   /// is a listener for auto-reconnect events
   final Function(String message)? onAutoReconnectEvent;
 
+  /// is a listener for connection timeout events
+  final Function()? onConnectionTimeout;
+
   /// OpenVPN's Constructions, don't forget to implement the listeners
   /// onVpnStatusChanged is a listener to see vpn status detail
   /// onVpnStageChanged is a listener to see what stage the connection was
   /// onAutoReconnectEvent is a listener for auto-reconnect related events
+  /// onConnectionTimeout is called when connection attempt times out
   OpenVPN({
     this.onVpnStatusChanged,
     this.onVpnStageChanged,
     this.onAutoReconnectEvent,
+    this.onConnectionTimeout,
   });
 
   ///This function should be called before any usage of OpenVPN
@@ -95,6 +106,8 @@ class OpenVPN {
   ///
   ///autoReconnect enables automatic reconnection when VPN is disconnected from system settings/control center (iOS only)
   ///
+  ///connectionTimeout is the duration to wait before timing out (default: 20 seconds)
+  ///
   ///
   ///Will return latest VPNStage
   Future<void> initialize({
@@ -102,6 +115,7 @@ class OpenVPN {
     String? localizedDescription,
     String? groupIdentifier,
     bool autoReconnect = false,
+    Duration? connectionTimeout,
     Function(VpnStatus status)? lastStatus,
     Function(VPNStage stage)? lastStage,
   }) async {
@@ -114,6 +128,9 @@ class OpenVPN {
     }
 
     _autoReconnectEnabled = autoReconnect;
+    if (connectionTimeout != null) {
+      _connectionTimeout = connectionTimeout;
+    }
     onVpnStatusChanged?.call(VpnStatus.empty());
     initialized = true;
     _initializeListener();
@@ -157,6 +174,14 @@ class OpenVPN {
   /// Get current auto-reconnect status
   bool get autoReconnectEnabled => _autoReconnectEnabled;
 
+  /// Set connection timeout duration
+  void setConnectionTimeout(Duration timeout) {
+    _connectionTimeout = timeout;
+  }
+
+  /// Get current connection timeout duration
+  Duration get connectionTimeout => _connectionTimeout;
+
   ///Connect to VPN
   ///
   ///config : Your openvpn configuration script, you can find it inside your .ovpn file
@@ -193,6 +218,7 @@ class OpenVPN {
   ///Disconnect from VPN
   void disconnect() {
     _tempDateTime = null;
+    _cancelConnectionTimeout();
     _channelControl.invokeMethod("disconnect");
     if (_vpnStatusTimer?.isActive ?? false) {
       _vpnStatusTimer?.cancel();
@@ -321,6 +347,7 @@ class OpenVPN {
   void dispose() {
     _vpnStatusTimer?.cancel();
     _vpnStatusTimer = null;
+    _cancelConnectionTimeout();
     if (initialized) {
       _channelControl.invokeMethod("dispose");
     }
@@ -352,6 +379,24 @@ class OpenVPN {
     return VPNStage.unknown;
   }
 
+  ///Start connection timeout timer
+  void _startConnectionTimeout() {
+    _cancelConnectionTimeout();
+    _connectionTimeoutTimer = Timer(_connectionTimeout, () {
+      // Timeout occurred - disconnect and notify
+      disconnect();
+      onConnectionTimeout?.call();
+    });
+  }
+
+  ///Cancel connection timeout timer
+  void _cancelConnectionTimeout() {
+    if (_connectionTimeoutTimer?.isActive ?? false) {
+      _connectionTimeoutTimer?.cancel();
+      _connectionTimeoutTimer = null;
+    }
+  }
+
   ///Initialize listener, called when you start connection and stopped while disconnected
   void _initializeListener() {
     _vpnStageSnapshot().listen((event) {
@@ -359,6 +404,23 @@ class OpenVPN {
       if (vpnStage != _lastStage) {
         onVpnStageChanged?.call(vpnStage, event);
         _lastStage = vpnStage;
+
+        // Handle connection timeout
+        if (vpnStage == VPNStage.connecting ||
+            vpnStage == VPNStage.authenticating ||
+            vpnStage == VPNStage.prepare ||
+            vpnStage == VPNStage.wait_connection) {
+          // Start timeout timer for connecting stages
+          _startConnectionTimeout();
+        } else if (vpnStage == VPNStage.connected) {
+          // Connection successful - cancel timeout
+          _cancelConnectionTimeout();
+        } else if (vpnStage == VPNStage.disconnected ||
+            vpnStage == VPNStage.error ||
+            vpnStage == VPNStage.denied) {
+          // Connection ended - cancel timeout
+          _cancelConnectionTimeout();
+        }
 
         // Handle auto-reconnect events
         if (Platform.isIOS && _autoReconnectEnabled) {
