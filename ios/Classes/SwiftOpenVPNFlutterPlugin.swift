@@ -190,7 +190,24 @@ class VPNUtils {
     func loadProviderManager(completion: @escaping (_ error: Error?) -> Void) {
         NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
             if error == nil {
-                self.providerManager = managers?.first ?? NETunnelProviderManager()
+           // Find existing manager that matches the providerBundleIdentifier
+if let existing = managers?.first(where: {
+    ($0.protocolConfiguration as? NETunnelProviderProtocol)?
+        .providerBundleIdentifier == self.providerBundleIdentifier
+}) {
+    self.providerManager = existing
+} else {
+    // Only create manager if no matching one exists
+    let newManager = NETunnelProviderManager()
+    let proto = NETunnelProviderProtocol()
+    proto.providerBundleIdentifier = self.providerBundleIdentifier
+    proto.serverAddress = ""
+    newManager.protocolConfiguration = proto
+    newManager.localizedDescription = self.localizedDescription
+    newManager.isEnabled = true
+
+    self.providerManager = newManager
+}
                 // Check if VPN was previously connected and should auto-reconnect
                 self.checkInitialVPNState()
                 // Start monitoring for unauthorized connections
