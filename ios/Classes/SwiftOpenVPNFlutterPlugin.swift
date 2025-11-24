@@ -175,42 +175,62 @@ class VPNUtils {
     var vpnStageObserver: NSObjectProtocol?
     var autoReconnectEnabled: Bool = false
 
-    // Track VPN state for auto-reconnect logic
     private var shouldBeConnected: Bool = false
     private var lastConfig: String?
     private var lastUsername: String?
     private var lastPassword: String?
     private var isManualDisconnect: Bool = false
     private var reconnectTimer: Timer?
-
-    // NEW: Track if connection was initiated by app
     private var appInitiatedConnection: Bool = false
     private var connectionMonitorTimer: Timer?
 
     func loadProviderManager(completion: @escaping (_ error: Error?) -> Void) {
         NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
             if error == nil {
-           // Find existing manager that matches the providerBundleIdentifier
-if let existing = managers?.first(where: {
-    ($0.protocolConfiguration as? NETunnelProviderProtocol)?
-        .providerBundleIdentifier == self.providerBundleIdentifier
-}) {
-    self.providerManager = existing
-} else {
-    // Only create manager if no matching one exists
-    let newManager = NETunnelProviderManager()
-    let proto = NETunnelProviderProtocol()
-    proto.providerBundleIdentifier = self.providerBundleIdentifier
-    proto.serverAddress = ""
-    newManager.protocolConfiguration = proto
-    newManager.localizedDescription = self.localizedDescription
-    newManager.isEnabled = true
-
-    self.providerManager = newManager
-}
-                // Check if VPN was previously connected and should auto-reconnect
+                // CRITICAL: Find existing manager OR use the first available one
+                if let existing = managers?.first(where: {
+                    ($0.protocolConfiguration as? NETunnelProviderProtocol)?
+                        .providerBundleIdentifier == self.providerBundleIdentifier
+                }) {
+                    // Use existing manager - DO NOT create new one
+                    self.providerManager = existing
+                    print("OpenVPN: Using existing VPN profile")
+                } else if let firstManager = managers?.first {
+                    // If there's any manager, reuse it instead of creating a new one
+                    // This prevents duplicates when vpn_permission already created one
+                    self.providerManager = firstManager
+                    
+                    // Update it with our settings
+                    if let proto = self.providerManager.protocolConfiguration as? NETunnelProviderProtocol {
+                        proto.providerBundleIdentifier = self.providerBundleIdentifier
+                        self.providerManager.protocolConfiguration = proto
+                    }
+                    self.providerManager.localizedDescription = self.localizedDescription
+                    self.providerManager.isEnabled = true
+                    
+                    // Save the updated configuration
+                    self.providerManager.saveToPreferences { saveError in
+                        if let saveError = saveError {
+                            print("OpenVPN: Error updating existing profile: \(saveError.localizedDescription)")
+                        } else {
+                            print("OpenVPN: Updated existing VPN profile")
+                        }
+                    }
+                } else {
+                    // Only create new manager if absolutely no managers exist
+                    let newManager = NETunnelProviderManager()
+                    let proto = NETunnelProviderProtocol()
+                    proto.providerBundleIdentifier = self.providerBundleIdentifier
+                    proto.serverAddress = "127.0.0.1"
+                    newManager.protocolConfiguration = proto
+                    newManager.localizedDescription = self.localizedDescription
+                    newManager.isEnabled = true
+                    
+                    self.providerManager = newManager
+                    print("OpenVPN: Created new VPN profile")
+                }
+                
                 self.checkInitialVPNState()
-                // Start monitoring for unauthorized connections
                 self.startConnectionMonitoring()
                 completion(nil)
             } else {
@@ -220,14 +240,12 @@ if let existing = managers?.first(where: {
     }
 
     private func checkInitialVPNState() {
-        // Check UserDefaults to see if VPN was previously in a "should be connected" state
         let userDefaults = UserDefaults(suiteName: self.groupIdentifier)
         self.shouldBeConnected = userDefaults?.bool(forKey: "vpn_should_be_connected") ?? false
         self.appInitiatedConnection =
             userDefaults?.bool(forKey: "app_initiated_connection") ?? false
 
         if self.shouldBeConnected && self.autoReconnectEnabled {
-            // If VPN should be connected but isn't, attempt reconnect
             if let currentStatus = self.providerManager?.connection.status,
                 currentStatus == .disconnected || currentStatus == .invalid
             {
@@ -243,7 +261,6 @@ if let existing = managers?.first(where: {
         userDefaults?.synchronize()
     }
 
-    // NEW: Monitor for unauthorized connections every 2 seconds
     private func startConnectionMonitoring() {
         self.connectionMonitorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) {
             [weak self] _ in
@@ -251,20 +268,15 @@ if let existing = managers?.first(where: {
         }
     }
 
-    // NEW: Check if VPN is connected without app authorization
     private func checkForUnauthorizedConnection() {
         guard let status = self.providerManager?.connection.status else { return }
 
-        // If VPN is connected/connecting but app didn't initiate it, disconnect immediately
         if (status == .connected || status == .connecting) && !self.appInitiatedConnection {
-            print(
-                "OpenVPN: Unauthorized connection detected from Settings/Control Center - Disconnecting"
-            )
+            print("OpenVPN: Unauthorized connection detected - Disconnecting")
             self.forceDisconnect()
         }
     }
 
-    // NEW: Force disconnect without triggering auto-reconnect
     private func forceDisconnect() {
         self.isManualDisconnect = true
         self.shouldBeConnected = false
@@ -278,22 +290,19 @@ if let existing = managers?.first(where: {
     func onVpnStatusChanged(notification: NEVPNStatus) {
         switch notification {
         case NEVPNStatus.connected:
-            // Only allow connection if app initiated it
             if !self.appInitiatedConnection {
-                print("OpenVPN: Unauthorized connection attempt blocked")
+                print("OpenVPN: Unauthorized connection blocked")
                 self.forceDisconnect()
                 return
             }
-
             stage?("connected")
             self.shouldBeConnected = true
             self.saveVPNState()
             self.cancelReconnectTimer()
             break
         case NEVPNStatus.connecting:
-            // Only allow connecting if app initiated it
             if !self.appInitiatedConnection {
-                print("OpenVPN: Unauthorized connecting attempt blocked")
+                print("OpenVPN: Unauthorized connecting blocked")
                 self.forceDisconnect()
                 return
             }
@@ -320,28 +329,19 @@ if let existing = managers?.first(where: {
     }
 
     private func handleDisconnection() {
-        // Check if this was an unauthorized disconnection from Settings/Control Center
         if self.appInitiatedConnection && self.shouldBeConnected && !self.isManualDisconnect {
-            // This was unauthorized disconnection - prevent it by reconnecting
             if self.autoReconnectEnabled {
-                print("OpenVPN: Unauthorized disconnection detected - Auto-reconnecting")
+                print("OpenVPN: Unauthorized disconnection - Auto-reconnecting")
                 self.scheduleReconnect()
                 return
             }
         }
 
-        // Only attempt reconnect if:
-        // 1. Auto-reconnect is enabled
-        // 2. VPN should be connected (was previously connected by user)
-        // 3. This wasn't a manual disconnect
-        // 4. We have the necessary connection details
         if self.autoReconnectEnabled && self.shouldBeConnected && !self.isManualDisconnect
             && self.lastConfig != nil
         {
-            // Schedule reconnection attempt after a short delay
             self.scheduleReconnect()
         } else if self.isManualDisconnect {
-            // Reset manual disconnect flag and update state
             self.isManualDisconnect = false
             self.shouldBeConnected = false
             self.appInitiatedConnection = false
@@ -350,10 +350,7 @@ if let existing = managers?.first(where: {
     }
 
     private func scheduleReconnect() {
-        // Cancel any existing timer
         self.cancelReconnectTimer()
-
-        // Schedule reconnection after 2 seconds
         self.reconnectTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) {
             [weak self] _ in
             self?.attemptReconnect()
@@ -371,9 +368,8 @@ if let existing = managers?.first(where: {
         ) { error in
             if let error = error {
                 print("OpenVPN: Auto-reconnect failed: \(error.localizedDescription)")
-                // Could implement exponential backoff here if needed
             } else {
-                print("OpenVPN: Auto-reconnect initiated successfully")
+                print("OpenVPN: Auto-reconnect initiated")
             }
         }
     }
@@ -421,12 +417,9 @@ if let existing = managers?.first(where: {
     ) {
         let configData = config
 
-        // Store connection details for potential reconnection
         self.lastConfig = config
         self.lastUsername = username
         self.lastPassword = password
-
-        // IMPORTANT: Mark this as app-initiated connection BEFORE starting
         self.appInitiatedConnection = true
         self.shouldBeConnected = true
         self.saveVPNState()
@@ -434,7 +427,7 @@ if let existing = managers?.first(where: {
         self.providerManager?.loadFromPreferences { error in
             if error == nil {
                 let tunnelProtocol = NETunnelProviderProtocol()
-                tunnelProtocol.serverAddress = ""
+                tunnelProtocol.serverAddress = "127.0.0.1"
                 tunnelProtocol.providerBundleIdentifier = self.providerBundleIdentifier
                 let nullData = "".data(using: .utf8)
                 tunnelProtocol.providerConfiguration = [
@@ -500,7 +493,6 @@ if let existing = managers?.first(where: {
     }
 
     func stopVPN() {
-        // Mark this as a manual disconnect to prevent auto-reconnect
         self.isManualDisconnect = true
         self.shouldBeConnected = false
         self.appInitiatedConnection = false
@@ -513,10 +505,8 @@ if let existing = managers?.first(where: {
         if let session = self.providerManager?.connection as? NETunnelProviderSession {
             do {
                 try session.sendProviderMessage("OPENVPN_STATS".data(using: .utf8)!) { (data) in
-                    //Do nothing
                 }
             } catch {
-                // some error
             }
         }
     }
