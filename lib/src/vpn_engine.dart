@@ -103,55 +103,6 @@ class OpenVPN {
   /// providerBundleIdentifier: Your Network Extension identifier
   ///
   /// This should be called BEFORE initialize() to check if permission is already granted
-  static Future<bool> checkVpnPermission({
-    required String providerBundleIdentifier,
-  }) async {
-    if (!Platform.isIOS) {
-      // Android doesn't need this check, permission is handled differently
-      return true;
-    }
-
-    try {
-      final result = await _channelControl.invokeMethod('checkVpnPermission', {
-        'providerBundleIdentifier': providerBundleIdentifier,
-      });
-      return result as bool? ?? false;
-    } on PlatformException catch (e) {
-      print('Error checking VPN permission: ${e.message}');
-      return false;
-    }
-  }
-
-  /// Request VPN permission (iOS only)
-  ///
-  /// Returns true if permission granted/already exists, false otherwise
-  ///
-  /// providerBundleIdentifier: Your Network Extension identifier
-  /// localizedDescription: Description shown in iOS Settings (default: "VPN")
-  ///
-  /// This creates a VPN profile if it doesn't exist and triggers the iOS permission dialog
-  /// Should be called BEFORE initialize() if permission is not yet granted
-  static Future<bool> requestVpnPermission({
-    required String providerBundleIdentifier,
-    String localizedDescription = "VPN",
-  }) async {
-    if (!Platform.isIOS) {
-      // Android doesn't need this, return true
-      return true;
-    }
-
-    try {
-      final result =
-          await _channelControl.invokeMethod('requestVpnPermission', {
-        'providerBundleIdentifier': providerBundleIdentifier,
-        'localizedDescription': localizedDescription,
-      });
-      return result as bool? ?? false;
-    } on PlatformException catch (e) {
-      print('Error requesting VPN permission: ${e.message}');
-      return false;
-    }
-  }
 
   ///This function should be called before any usage of OpenVPN
   ///All params required for iOS, make sure you read the plugin's documentation
@@ -371,6 +322,56 @@ class OpenVPN {
     return _channelControl
         .invokeMethod("request_permission")
         .then((value) => value ?? false);
+  }
+
+  static Future<bool> checkVpnPermission({
+    required String providerBundleIdentifier,
+  }) async {
+    if (!Platform.isIOS) {
+      // Android doesn't need this check, permission is handled differently
+      return true;
+    }
+
+    try {
+      final result = await _channelControl.invokeMethod('checkVpnPermission', {
+        'providerBundleIdentifier': providerBundleIdentifier,
+      });
+      return result as bool? ?? false;
+    } on PlatformException catch (e) {
+      print('Error checking VPN permission: ${e.message}');
+      return false;
+    }
+  }
+
+  /// Request VPN permission (iOS only)
+  ///
+  /// Returns true if permission granted/already exists, false otherwise
+  ///
+  /// providerBundleIdentifier: Your Network Extension identifier
+  /// localizedDescription: Description shown in iOS Settings (default: "VPN")
+  ///
+  /// This creates a VPN profile if it doesn't exist and triggers the iOS permission dialog
+  /// Should be called BEFORE initialize() if permission is not yet granted
+  static Future<bool> requestVpnPermission({
+    required String providerBundleIdentifier,
+    String localizedDescription = "VPN",
+  }) async {
+    if (!Platform.isIOS) {
+      // Android doesn't need this, return true
+      return true;
+    }
+
+    try {
+      final result =
+          await _channelControl.invokeMethod('requestVpnPermission', {
+        'providerBundleIdentifier': providerBundleIdentifier,
+        'localizedDescription': localizedDescription,
+      });
+      return result as bool? ?? false;
+    } on PlatformException catch (e) {
+      print('Error requesting VPN permission: ${e.message}');
+      return false;
+    }
   }
 
   ///Sometimes config script has too many Remotes, it cause ANR in several devices,
