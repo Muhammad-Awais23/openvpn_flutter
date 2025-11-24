@@ -37,6 +37,42 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
             case "stage":
                 result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
                 break
+                
+            // NEW: Check VPN permission without creating duplicate profiles
+            case "checkVpnPermission":
+                let providerBundleIdentifier: String? =
+                    (call.arguments as? [String: Any])?["providerBundleIdentifier"] as? String
+                
+                if providerBundleIdentifier == nil {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing providerBundleIdentifier", details: nil))
+                    return
+                }
+                
+                SwiftOpenVPNFlutterPlugin.utils.checkVpnPermission(
+                    providerBundleIdentifier: providerBundleIdentifier!,
+                    result: result)
+                break
+                
+            // NEW: Request VPN permission (creates profile if needed)
+            case "requestVpnPermission":
+                let providerBundleIdentifier: String? =
+                    (call.arguments as? [String: Any])?["providerBundleIdentifier"] as? String
+                let localizedDescription: String? =
+                    (call.arguments as? [String: Any])?["localizedDescription"] as? String
+                
+                if providerBundleIdentifier == nil {
+                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing providerBundleIdentifier", details: nil))
+                    return
+                }
+                
+                let description = localizedDescription ?? "VPN"
+                
+                SwiftOpenVPNFlutterPlugin.utils.requestVpnPermission(
+                    providerBundleIdentifier: providerBundleIdentifier!,
+                    localizedDescription: description,
+                    result: result)
+                break
+                
             case "initialize":
                 let providerBundleIdentifier: String? =
                     (call.arguments as? [String: Any])?["providerBundleIdentifier"] as? String
@@ -184,10 +220,77 @@ class VPNUtils {
     private var appInitiatedConnection: Bool = false
     private var connectionMonitorTimer: Timer?
 
+    // NEW: Check if VPN permission exists
+    func checkVpnPermission(providerBundleIdentifier: String, result: @escaping FlutterResult) {
+        NETunnelProviderManager.loadAllFromPreferences { managers, error in
+            if let error = error {
+                result(FlutterError(code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
+                return
+            }
+
+            let exists = managers?.contains(where: { manager in
+                (manager.protocolConfiguration as? NETunnelProviderProtocol)?
+                    .providerBundleIdentifier == providerBundleIdentifier
+            }) ?? false
+
+            result(exists)
+        }
+    }
+
+    // NEW: Request VPN permission (reuses existing profile if available)
+    func requestVpnPermission(
+        providerBundleIdentifier: String,
+        localizedDescription: String,
+        result: @escaping FlutterResult
+    ) {
+        NETunnelProviderManager.loadAllFromPreferences { managers, error in
+            if let error = error {
+                result(FlutterError(code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
+                return
+            }
+
+            // Check if profile already exists
+            if let existingManager = managers?.first(where: {
+                ($0.protocolConfiguration as? NETunnelProviderProtocol)?
+                    .providerBundleIdentifier == providerBundleIdentifier
+            }) {
+                print("VPN Permission: Profile already exists, returning success")
+                result(true)
+                return
+            }
+
+            // Create minimal profile ONLY if none exists
+            let manager = NETunnelProviderManager()
+            let proto = NETunnelProviderProtocol()
+            proto.providerBundleIdentifier = providerBundleIdentifier
+            proto.serverAddress = "127.0.0.1"
+
+            manager.protocolConfiguration = proto
+            manager.localizedDescription = localizedDescription
+            manager.isEnabled = true
+
+            manager.saveToPreferences { saveError in
+                if let saveError = saveError {
+                    result(FlutterError(code: "SAVE_ERROR", message: saveError.localizedDescription, details: nil))
+                    return
+                }
+
+                manager.loadFromPreferences { loadError in
+                    if let loadError = loadError {
+                        result(FlutterError(code: "LOAD_ERROR", message: loadError.localizedDescription, details: nil))
+                    } else {
+                        print("VPN Permission: Successfully created VPN profile")
+                        result(true)
+                    }
+                }
+            }
+        }
+    }
+
     func loadProviderManager(completion: @escaping (_ error: Error?) -> Void) {
         NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
             if error == nil {
-                // CRITICAL FIX: Always use the FIRST EXISTING manager, never create new ones
+                // CRITICAL: Always use the FIRST EXISTING manager, never create new ones
                 if let managers = managers, !managers.isEmpty {
                     // Use the first manager regardless of bundle identifier
                     self.providerManager = managers[0]
