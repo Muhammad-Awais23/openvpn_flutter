@@ -187,37 +187,38 @@ class VPNUtils {
     func loadProviderManager(completion: @escaping (_ error: Error?) -> Void) {
         NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
             if error == nil {
-                // CRITICAL: Find existing manager OR use the first available one
-                if let existing = managers?.first(where: {
-                    ($0.protocolConfiguration as? NETunnelProviderProtocol)?
-                        .providerBundleIdentifier == self.providerBundleIdentifier
-                }) {
-                    // Use existing manager - DO NOT create new one
-                    self.providerManager = existing
-                    print("OpenVPN: Using existing VPN profile")
-                } else if let firstManager = managers?.first {
-                    // If there's any manager, reuse it instead of creating a new one
-                    // This prevents duplicates when vpn_permission already created one
-                    self.providerManager = firstManager
+                // CRITICAL FIX: Always use the FIRST EXISTING manager, never create new ones
+                if let managers = managers, !managers.isEmpty {
+                    // Use the first manager regardless of bundle identifier
+                    self.providerManager = managers[0]
+                    print("OpenVPN: Reusing existing VPN profile")
                     
-                    // Update it with our settings
+                    // Update its configuration to match our requirements
                     if let proto = self.providerManager.protocolConfiguration as? NETunnelProviderProtocol {
                         proto.providerBundleIdentifier = self.providerBundleIdentifier
+                        proto.serverAddress = "127.0.0.1"
+                    } else {
+                        // Create protocol if it doesn't exist
+                        let proto = NETunnelProviderProtocol()
+                        proto.providerBundleIdentifier = self.providerBundleIdentifier
+                        proto.serverAddress = "127.0.0.1"
                         self.providerManager.protocolConfiguration = proto
                     }
+                    
                     self.providerManager.localizedDescription = self.localizedDescription
                     self.providerManager.isEnabled = true
                     
-                    // Save the updated configuration
+                    // Save updated configuration
                     self.providerManager.saveToPreferences { saveError in
                         if let saveError = saveError {
-                            print("OpenVPN: Error updating existing profile: \(saveError.localizedDescription)")
+                            print("OpenVPN: Error updating profile: \(saveError.localizedDescription)")
                         } else {
-                            print("OpenVPN: Updated existing VPN profile")
+                            print("OpenVPN: Successfully updated existing profile")
                         }
                     }
                 } else {
-                    // Only create new manager if absolutely no managers exist
+                    // ONLY create new manager if NO managers exist at all
+                    print("OpenVPN: No existing profile found, creating new one")
                     let newManager = NETunnelProviderManager()
                     let proto = NETunnelProviderProtocol()
                     proto.providerBundleIdentifier = self.providerBundleIdentifier
@@ -227,7 +228,6 @@ class VPNUtils {
                     newManager.isEnabled = true
                     
                     self.providerManager = newManager
-                    print("OpenVPN: Created new VPN profile")
                 }
                 
                 self.checkInitialVPNState()
