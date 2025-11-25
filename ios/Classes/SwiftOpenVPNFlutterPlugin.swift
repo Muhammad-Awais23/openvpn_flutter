@@ -38,7 +38,6 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                 result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
                 break
                 
-            // NEW: Check VPN permission without creating duplicate profiles
             case "checkVpnPermission":
                 let providerBundleIdentifier: String? =
                     (call.arguments as? [String: Any])?["providerBundleIdentifier"] as? String
@@ -53,7 +52,6 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
                     result: result)
                 break
                 
-            // NEW: Request VPN permission (creates profile if needed)
             case "requestVpnPermission":
                 let providerBundleIdentifier: String? =
                     (call.arguments as? [String: Any])?["providerBundleIdentifier"] as? String
@@ -220,7 +218,6 @@ class VPNUtils {
     private var appInitiatedConnection: Bool = false
     private var connectionMonitorTimer: Timer?
 
-    // NEW: Check if VPN permission exists
     func checkVpnPermission(providerBundleIdentifier: String, result: @escaping FlutterResult) {
         NETunnelProviderManager.loadAllFromPreferences { managers, error in
             if let error = error {
@@ -237,7 +234,6 @@ class VPNUtils {
         }
     }
 
-    // NEW: Request VPN permission (reuses existing profile if available)
     func requestVpnPermission(
         providerBundleIdentifier: String,
         localizedDescription: String,
@@ -254,7 +250,7 @@ class VPNUtils {
                 ($0.protocolConfiguration as? NETunnelProviderProtocol)?
                     .providerBundleIdentifier == providerBundleIdentifier
             }) {
-                print("VPN Permission: Profile already exists, returning success")
+                print("VPN Permission: Profile already exists")
                 result(true)
                 return
             }
@@ -263,7 +259,7 @@ class VPNUtils {
             let manager = NETunnelProviderManager()
             let proto = NETunnelProviderProtocol()
             proto.providerBundleIdentifier = providerBundleIdentifier
-            proto.serverAddress = "127.0.0.1"
+            proto.serverAddress = "VPN"  // Use description instead of IP
 
             manager.protocolConfiguration = proto
             manager.localizedDescription = localizedDescription
@@ -275,70 +271,49 @@ class VPNUtils {
                     return
                 }
 
-                manager.loadFromPreferences { loadError in
-                    if let loadError = loadError {
-                        result(FlutterError(code: "LOAD_ERROR", message: loadError.localizedDescription, details: nil))
-                    } else {
-                        print("VPN Permission: Successfully created VPN profile")
-                        result(true)
-                    }
-                }
+                print("VPN Permission: Profile created successfully")
+                result(true)
             }
         }
     }
 
     func loadProviderManager(completion: @escaping (_ error: Error?) -> Void) {
         NETunnelProviderManager.loadAllFromPreferences { (managers, error) in
-            if error == nil {
-                // CRITICAL: Always use the FIRST EXISTING manager, never create new ones
-                if let managers = managers, !managers.isEmpty {
-                    // Use the first manager regardless of bundle identifier
-                    self.providerManager = managers[0]
-                    print("OpenVPN: Reusing existing VPN profile")
-                    
-                    // Update its configuration to match our requirements
-                    if let proto = self.providerManager.protocolConfiguration as? NETunnelProviderProtocol {
-                        proto.providerBundleIdentifier = self.providerBundleIdentifier
-                        proto.serverAddress = "127.0.0.1"
-                    } else {
-                        // Create protocol if it doesn't exist
-                        let proto = NETunnelProviderProtocol()
-                        proto.providerBundleIdentifier = self.providerBundleIdentifier
-                        proto.serverAddress = "127.0.0.1"
-                        self.providerManager.protocolConfiguration = proto
-                    }
-                    
-                    self.providerManager.localizedDescription = self.localizedDescription
-                    self.providerManager.isEnabled = true
-                    
-                    // Save updated configuration
-                    self.providerManager.saveToPreferences { saveError in
-                        if let saveError = saveError {
-                            print("OpenVPN: Error updating profile: \(saveError.localizedDescription)")
-                        } else {
-                            print("OpenVPN: Successfully updated existing profile")
-                        }
-                    }
-                } else {
-                    // ONLY create new manager if NO managers exist at all
-                    print("OpenVPN: No existing profile found, creating new one")
-                    let newManager = NETunnelProviderManager()
-                    let proto = NETunnelProviderProtocol()
-                    proto.providerBundleIdentifier = self.providerBundleIdentifier
-                    proto.serverAddress = "127.0.0.1"
-                    newManager.protocolConfiguration = proto
-                    newManager.localizedDescription = self.localizedDescription
-                    newManager.isEnabled = true
-                    
-                    self.providerManager = newManager
-                }
-                
-                self.checkInitialVPNState()
-                self.startConnectionMonitoring()
-                completion(nil)
-            } else {
+            if error != nil {
                 completion(error)
+                return
             }
+            
+            guard let managers = managers else {
+                // No managers exist at all - this shouldn't happen after requestVpnPermission
+                print("OpenVPN: No VPN profiles found")
+                completion(NSError(domain: "OpenVPN", code: -1, userInfo: [NSLocalizedDescriptionKey: "No VPN profile found. Call requestVpnPermission first."]))
+                return
+            }
+            
+            // Find the manager with matching bundle identifier
+            if let existingManager = managers.first(where: {
+                ($0.protocolConfiguration as? NETunnelProviderProtocol)?
+                    .providerBundleIdentifier == self.providerBundleIdentifier
+            }) {
+                print("OpenVPN: Found existing VPN profile with matching bundle ID")
+                self.providerManager = existingManager
+            } else if !managers.isEmpty {
+                // Fallback: use the first manager and update it
+                print("OpenVPN: Using first available VPN profile")
+                self.providerManager = managers[0]
+            } else {
+                completion(NSError(domain: "OpenVPN", code: -1, userInfo: [NSLocalizedDescriptionKey: "No VPN profile available"]))
+                return
+            }
+            
+            // DO NOT save here - just use the existing manager
+            // The profile was already created by requestVpnPermission
+            // We'll update it when configureVPN is called
+            
+            self.checkInitialVPNState()
+            self.startConnectionMonitoring()
+            completion(nil)
         }
     }
 
@@ -528,69 +503,75 @@ class VPNUtils {
         self.saveVPNState()
 
         self.providerManager?.loadFromPreferences { error in
-            if error == nil {
-                let tunnelProtocol = NETunnelProviderProtocol()
-                tunnelProtocol.serverAddress = "127.0.0.1"
-                tunnelProtocol.providerBundleIdentifier = self.providerBundleIdentifier
-                let nullData = "".data(using: .utf8)
-                tunnelProtocol.providerConfiguration = [
-                    "config": configData?.data(using: .utf8) ?? nullData!,
-                    "groupIdentifier": self.groupIdentifier?.data(using: .utf8) ?? nullData!,
-                    "username": username?.data(using: .utf8) ?? nullData!,
-                    "password": password?.data(using: .utf8) ?? nullData!,
-                ]
-                tunnelProtocol.disconnectOnSleep = false
-                self.providerManager.protocolConfiguration = tunnelProtocol
-                self.providerManager.localizedDescription = self.localizedDescription
-                self.providerManager.isEnabled = true
+            if error != nil {
+                completion(error)
+                return
+            }
+            
+            // Update the EXISTING protocol configuration
+            let tunnelProtocol = NETunnelProviderProtocol()
+            tunnelProtocol.serverAddress = self.localizedDescription ?? "VPN"
+            tunnelProtocol.providerBundleIdentifier = self.providerBundleIdentifier
+            let nullData = "".data(using: .utf8)
+            tunnelProtocol.providerConfiguration = [
+                "config": configData?.data(using: .utf8) ?? nullData!,
+                "groupIdentifier": self.groupIdentifier?.data(using: .utf8) ?? nullData!,
+                "username": username?.data(using: .utf8) ?? nullData!,
+                "password": password?.data(using: .utf8) ?? nullData!,
+            ]
+            tunnelProtocol.disconnectOnSleep = false
+            
+            self.providerManager.protocolConfiguration = tunnelProtocol
+            self.providerManager.localizedDescription = self.localizedDescription
+            self.providerManager.isEnabled = true
 
-                self.providerManager.saveToPreferences(completionHandler: { (error) in
-                    if error == nil {
-                        self.providerManager.loadFromPreferences(completionHandler: { (error) in
-                            if error != nil {
-                                completion(error)
-                                return
-                            }
-                            do {
-                                if self.vpnStageObserver != nil {
-                                    NotificationCenter.default.removeObserver(
-                                        self.vpnStageObserver!,
-                                        name: NSNotification.Name.NEVPNStatusDidChange,
-                                        object: nil)
-                                }
-                                self.vpnStageObserver = NotificationCenter.default.addObserver(
-                                    forName: NSNotification.Name.NEVPNStatusDidChange,
-                                    object: nil,
-                                    queue: nil
-                                ) { [weak self] notification in
-                                    let nevpnconn = notification.object as! NEVPNConnection
-                                    let status = nevpnconn.status
-                                    self?.onVpnStatusChanged(notification: status)
-                                }
+            // Save the updated configuration to the SAME profile
+            self.providerManager.saveToPreferences { saveError in
+                if saveError != nil {
+                    completion(saveError)
+                    return
+                }
+                
+                // Reload to ensure we have the latest version
+                self.providerManager.loadFromPreferences { loadError in
+                    if loadError != nil {
+                        completion(loadError)
+                        return
+                    }
+                    
+                    do {
+                        if self.vpnStageObserver != nil {
+                            NotificationCenter.default.removeObserver(
+                                self.vpnStageObserver!,
+                                name: NSNotification.Name.NEVPNStatusDidChange,
+                                object: nil)
+                        }
+                        self.vpnStageObserver = NotificationCenter.default.addObserver(
+                            forName: NSNotification.Name.NEVPNStatusDidChange,
+                            object: nil,
+                            queue: nil
+                        ) { [weak self] notification in
+                            let nevpnconn = notification.object as! NEVPNConnection
+                            let status = nevpnconn.status
+                            self?.onVpnStatusChanged(notification: status)
+                        }
 
-                                if username != nil && password != nil {
-                                    let options: [String: NSObject] = [
-                                        "username": username! as NSString,
-                                        "password": password! as NSString,
-                                    ]
-                                    try self.providerManager.connection.startVPNTunnel(
-                                        options: options)
-                                } else {
-                                    try self.providerManager.connection.startVPNTunnel()
-                                }
-                                completion(nil)
-                            } catch let error {
-                                self.stopVPN()
-                                print("Error info: \(error)")
-                                completion(error)
-                            }
-                        })
-                    } else {
+                        if username != nil && password != nil {
+                            let options: [String: NSObject] = [
+                                "username": username! as NSString,
+                                "password": password! as NSString,
+                            ]
+                            try self.providerManager.connection.startVPNTunnel(options: options)
+                        } else {
+                            try self.providerManager.connection.startVPNTunnel()
+                        }
+                        completion(nil)
+                    } catch let error {
+                        self.stopVPN()
+                        print("Error info: \(error)")
                         completion(error)
                     }
-                })
-            } else {
-                completion(error)
+                }
             }
         }
     }
