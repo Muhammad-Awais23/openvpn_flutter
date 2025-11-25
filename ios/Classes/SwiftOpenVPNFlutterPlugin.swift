@@ -502,10 +502,21 @@ class VPNUtils {
         self.shouldBeConnected = true
         self.saveVPNState()
 
-        self.providerManager?.loadFromPreferences { error in
+        // CRITICAL FIX: Always reload ALL managers first to get the latest state
+        NETunnelProviderManager.loadAllFromPreferences { managers, error in
             if error != nil {
                 completion(error)
                 return
+            }
+            
+            // Find our manager again (it might have been updated)
+            if let manager = managers?.first(where: {
+                ($0.protocolConfiguration as? NETunnelProviderProtocol)?
+                    .providerBundleIdentifier == self.providerBundleIdentifier
+            }) {
+                self.providerManager = manager
+            } else if let manager = managers?.first {
+                self.providerManager = manager
             }
             
             // Update the EXISTING protocol configuration
@@ -525,17 +536,31 @@ class VPNUtils {
             self.providerManager.localizedDescription = self.localizedDescription
             self.providerManager.isEnabled = true
 
-            // Save the updated configuration to the SAME profile
+            // Save the updated configuration
             self.providerManager.saveToPreferences { saveError in
                 if saveError != nil {
                     completion(saveError)
                     return
                 }
                 
-                // Reload to ensure we have the latest version
-                self.providerManager.loadFromPreferences { loadError in
-                    if loadError != nil {
-                        completion(loadError)
+                print("OpenVPN: Configuration saved, reloading manager...")
+                
+                // CRITICAL: Reload ALL managers again to ensure we have the absolute latest
+                NETunnelProviderManager.loadAllFromPreferences { reloadedManagers, reloadError in
+                    if reloadError != nil {
+                        completion(reloadError)
+                        return
+                    }
+                    
+                    // Get the fresh manager instance
+                    if let freshManager = reloadedManagers?.first(where: {
+                        ($0.protocolConfiguration as? NETunnelProviderProtocol)?
+                            .providerBundleIdentifier == self.providerBundleIdentifier
+                    }) {
+                        self.providerManager = freshManager
+                        print("OpenVPN: Manager reloaded successfully")
+                    } else {
+                        completion(NSError(domain: "OpenVPN", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to reload manager"]))
                         return
                     }
                     
@@ -556,6 +581,7 @@ class VPNUtils {
                             self?.onVpnStatusChanged(notification: status)
                         }
 
+                        print("OpenVPN: Starting VPN tunnel...")
                         if username != nil && password != nil {
                             let options: [String: NSObject] = [
                                 "username": username! as NSString,
@@ -565,10 +591,11 @@ class VPNUtils {
                         } else {
                             try self.providerManager.connection.startVPNTunnel()
                         }
+                        print("OpenVPN: VPN tunnel start command sent")
                         completion(nil)
                     } catch let error {
+                        print("OpenVPN: Failed to start tunnel: \(error.localizedDescription)")
                         self.stopVPN()
-                        print("Error info: \(error)")
                         completion(error)
                     }
                 }
