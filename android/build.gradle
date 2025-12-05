@@ -46,7 +46,6 @@ android {
     }
 }
 
-dependencies {
-    implementation 'com.github.nizwar:openvpn_library:android_16kb-SNAPSHOT'
+dependencies {  implementation 'com.github.Muhammad-Awais23:openvpn_library_16kb:-SNAPSHOT'
 }
 
