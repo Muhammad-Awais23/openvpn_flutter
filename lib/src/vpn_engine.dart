@@ -16,17 +16,11 @@ enum VPNStage {
   disconnecting,
   denied,
   error,
-// ignore: constant_identifier_names
   wait_connection,
-// ignore: constant_identifier_names
   vpn_generate_config,
-// ignore: constant_identifier_names
   get_config,
-// ignore: constant_identifier_names
   tcp_connect,
-// ignore: constant_identifier_names
   udp_connect,
-// ignore: constant_identifier_names
   assign_ip,
   resolve,
   exiting,
@@ -51,8 +45,6 @@ class OpenVPN {
       const EventChannel(_eventChannelVpnStage).receiveBroadcastStream().cast();
 
   ///Timer to get vpnstatus as a loop
-  ///
-  ///I know it was bad practice, but this is the only way to avoid android status duration having long delay
   Timer? _vpnStatusTimer;
 
   ///Timer for connection timeout
@@ -85,10 +77,6 @@ class OpenVPN {
   final Function()? onConnectionTimeout;
 
   /// OpenVPN's Constructions, don't forget to implement the listeners
-  /// onVpnStatusChanged is a listener to see vpn status detail
-  /// onVpnStageChanged is a listener to see what stage the connection was
-  /// onAutoReconnectEvent is a listener for auto-reconnect related events
-  /// onConnectionTimeout is called when connection attempt times out
   OpenVPN({
     this.onVpnStatusChanged,
     this.onVpnStageChanged,
@@ -96,26 +84,108 @@ class OpenVPN {
     this.onConnectionTimeout,
   });
 
-  /// Check if VPN permission is granted (iOS only)
+  /// Check if VPN permission is granted
   ///
-  /// Returns true if VPN profile exists, false otherwise
+  /// For iOS: Checks if VPN profile exists
+  /// For Android: Checks if VpnService.prepare() returns null (meaning permission granted)
   ///
-  /// providerBundleIdentifier: Your Network Extension identifier
+  /// Returns true if VPN permission is granted, false otherwise
+  ///
+  /// [providerBundleIdentifier] is required for iOS (Network Extension identifier)
+  /// For Android, this parameter is ignored
   ///
   /// This should be called BEFORE initialize() to check if permission is already granted
+  static Future<bool> checkVpnPermission({
+    String? providerBundleIdentifier,
+  }) async {
+    if (Platform.isIOS) {
+      if (providerBundleIdentifier == null) {
+        throw ArgumentError('providerBundleIdentifier is required for iOS');
+      }
+
+      try {
+        final result =
+            await _channelControl.invokeMethod('checkVpnPermission', {
+          'providerBundleIdentifier': providerBundleIdentifier,
+        });
+        return result as bool? ?? false;
+      } on PlatformException catch (e) {
+        print('Error checking VPN permission (iOS): ${e.message}');
+        return false;
+      }
+    } else if (Platform.isAndroid) {
+      try {
+        final result = await _channelControl.invokeMethod('checkVpnPermission');
+        return result as bool? ?? false;
+      } on PlatformException catch (e) {
+        print('Error checking VPN permission (Android): ${e.message}');
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  /// Request VPN permission
+  ///
+  /// For iOS: Creates a VPN profile if it doesn't exist and triggers the iOS permission dialog
+  /// For Android: Shows the VPN permission dialog using VpnService.prepare()
+  ///
+  /// Returns true if permission granted/already exists, false otherwise
+  ///
+  /// [providerBundleIdentifier]: Required for iOS (Your Network Extension identifier)
+  /// [localizedDescription]: Description shown in iOS Settings (default: "VPN")
+  ///
+  /// For Android, only the permission dialog is shown, no additional parameters needed
+  ///
+  /// This creates a VPN profile (iOS) or requests permission (Android) if not already granted
+  /// Should be called BEFORE initialize() if permission is not yet granted
+  static Future<bool> requestVpnPermission({
+    String? providerBundleIdentifier,
+    String localizedDescription = "VPN",
+  }) async {
+    if (Platform.isIOS) {
+      if (providerBundleIdentifier == null) {
+        throw ArgumentError('providerBundleIdentifier is required for iOS');
+      }
+
+      try {
+        final result =
+            await _channelControl.invokeMethod('requestVpnPermission', {
+          'providerBundleIdentifier': providerBundleIdentifier,
+          'localizedDescription': localizedDescription,
+        });
+        return result as bool? ?? false;
+      } on PlatformException catch (e) {
+        print('Error requesting VPN permission (iOS): ${e.message}');
+        return false;
+      }
+    } else if (Platform.isAndroid) {
+      try {
+        final result =
+            await _channelControl.invokeMethod('requestVpnPermission');
+        return result as bool? ?? false;
+      } on PlatformException catch (e) {
+        print('Error requesting VPN permission (Android): ${e.message}');
+        return false;
+      }
+    }
+
+    return false;
+  }
 
   ///This function should be called before any usage of OpenVPN
   ///All params required for iOS, make sure you read the plugin's documentation
   ///
+  ///[providerBundleIdentifier] is for your Network Extension identifier (iOS only)
   ///
-  ///providerBundleIdentfier is for your Network Extension identifier
+  ///[localizedDescription] is for description to show in user's settings (iOS only)
   ///
-  ///localizedDescription is for description to show in user's settings
+  ///[groupIdentifier] is for App Group identifier (iOS only)
   ///
-  ///autoReconnect enables automatic reconnection when VPN is disconnected from system settings/control center (iOS only)
+  ///[autoReconnect] enables automatic reconnection when VPN is disconnected (iOS only)
   ///
-  ///connectionTimeout is the duration to wait before timing out (default: 20 seconds)
-  ///
+  ///[connectionTimeout] is the duration to wait before timing out (default: 20 seconds)
   ///
   ///Will return latest VPNStage
   Future<void> initialize({
@@ -132,7 +202,7 @@ class OpenVPN {
           groupIdentifier != null &&
               providerBundleIdentifier != null &&
               localizedDescription != null,
-          "These values are required for ios.");
+          "These values are required for iOS.");
     }
 
     _autoReconnectEnabled = autoReconnect;
@@ -192,15 +262,15 @@ class OpenVPN {
 
   ///Connect to VPN
   ///
-  ///config : Your openvpn configuration script, you can find it inside your .ovpn file
+  ///[config]: Your openvpn configuration script, you can find it inside your .ovpn file
   ///
-  ///name : name that will show in user's notification
+  ///[name]: name that will show in user's notification
   ///
-  ///certIsRequired : default is false, if your config file has cert, set it to true
+  ///[certIsRequired]: default is false, if your config file has cert, set it to true
   ///
-  ///username & password : set your username and password if your config file has auth-user-pass
+  ///[username] & [password]: set your username and password if your config file has auth-user-pass
   ///
-  ///bypassPackages : exclude some apps to access/use the VPN Connection, it was List<String> of applications package's name (Android Only)
+  ///[bypassPackages]: exclude some apps to access/use the VPN Connection (Android Only)
   Future connect(String config, String name,
       {String? username,
       String? password,
@@ -246,7 +316,6 @@ class OpenVPN {
 
   ///Get latest connection status
   Future<VpnStatus> status() {
-    //Have to check if user already connected to get real data
     return stage().then((value) async {
       var status = VpnStatus.empty();
       if (value == VPNStage.connected) {
@@ -260,7 +329,6 @@ class OpenVPN {
 
               var splitted = value.split("_");
 
-              // Ensure array has at least 5 elements
               while (splitted.length < 5) splitted.add("0");
 
               var connectedOn = DateTime.tryParse(splitted[0]) ??
@@ -318,66 +386,18 @@ class OpenVPN {
   }
 
   ///Request android permission (Return true if already granted)
+  ///
+  ///DEPRECATED: Use [checkVpnPermission] and [requestVpnPermission] instead
+  @Deprecated('Use checkVpnPermission() and requestVpnPermission() instead')
   Future<bool> requestPermissionAndroid() async {
     return _channelControl
         .invokeMethod("request_permission")
         .then((value) => value ?? false);
   }
 
-  static Future<bool> checkVpnPermission({
-    required String providerBundleIdentifier,
-  }) async {
-    if (!Platform.isIOS) {
-      // Android doesn't need this check, permission is handled differently
-      return true;
-    }
-
-    try {
-      final result = await _channelControl.invokeMethod('checkVpnPermission', {
-        'providerBundleIdentifier': providerBundleIdentifier,
-      });
-      return result as bool? ?? false;
-    } on PlatformException catch (e) {
-      print('Error checking VPN permission: ${e.message}');
-      return false;
-    }
-  }
-
-  /// Request VPN permission (iOS only)
+  ///Sometimes config script has too many Remotes, it cause ANR in several devices
   ///
-  /// Returns true if permission granted/already exists, false otherwise
-  ///
-  /// providerBundleIdentifier: Your Network Extension identifier
-  /// localizedDescription: Description shown in iOS Settings (default: "VPN")
-  ///
-  /// This creates a VPN profile if it doesn't exist and triggers the iOS permission dialog
-  /// Should be called BEFORE initialize() if permission is not yet granted
-  static Future<bool> requestVpnPermission({
-    required String providerBundleIdentifier,
-    String localizedDescription = "VPN",
-  }) async {
-    if (!Platform.isIOS) {
-      // Android doesn't need this, return true
-      return true;
-    }
-
-    try {
-      final result =
-          await _channelControl.invokeMethod('requestVpnPermission', {
-        'providerBundleIdentifier': providerBundleIdentifier,
-        'localizedDescription': localizedDescription,
-      });
-      return result as bool? ?? false;
-    } on PlatformException catch (e) {
-      print('Error requesting VPN permission: ${e.message}');
-      return false;
-    }
-  }
-
-  ///Sometimes config script has too many Remotes, it cause ANR in several devices,
-  ///This happened because the plugin check every remote and somehow affected the UI to freeze
-  ///
-  ///Use this function if you wanted to force user to use 1 remote by randomize the remotes provided
+  ///Use this function if you wanted to force user to use 1 remote by randomize the remotes
   static Future<String?> filteredConfig(String? config) async {
     List<String> remotes = [];
     List<String> output = [];
@@ -441,7 +461,6 @@ class OpenVPN {
   void _startConnectionTimeout() {
     _cancelConnectionTimeout();
     _connectionTimeoutTimer = Timer(_connectionTimeout, () {
-      // Timeout occurred - disconnect and notify
       disconnect();
       onConnectionTimeout?.call();
     });
@@ -455,7 +474,7 @@ class OpenVPN {
     }
   }
 
-  ///Initialize listener, called when you start connection and stopped while disconnected
+  ///Initialize listener
   void _initializeListener() {
     _vpnStageSnapshot().listen((event) {
       var vpnStage = _strToStage(event);
@@ -463,27 +482,21 @@ class OpenVPN {
         onVpnStageChanged?.call(vpnStage, event);
         _lastStage = vpnStage;
 
-        // Handle connection timeout
         if (vpnStage == VPNStage.connecting ||
             vpnStage == VPNStage.authenticating ||
             vpnStage == VPNStage.prepare ||
             vpnStage == VPNStage.wait_connection) {
-          // Start timeout timer for connecting stages
           _startConnectionTimeout();
         } else if (vpnStage == VPNStage.connected) {
-          // Connection successful - cancel timeout
           _cancelConnectionTimeout();
         } else if (vpnStage == VPNStage.disconnected ||
             vpnStage == VPNStage.error ||
             vpnStage == VPNStage.denied) {
-          // Connection ended - cancel timeout
           _cancelConnectionTimeout();
         }
 
-        // Handle auto-reconnect events
         if (Platform.isIOS && _autoReconnectEnabled) {
           if (vpnStage == VPNStage.connecting) {
-            // This might be an auto-reconnect attempt
             onAutoReconnectEvent?.call("Attempting to reconnect...");
           } else if (vpnStage == VPNStage.connected &&
               _lastStage == VPNStage.connecting) {
