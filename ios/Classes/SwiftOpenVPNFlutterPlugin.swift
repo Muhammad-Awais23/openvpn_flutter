@@ -37,40 +37,46 @@ public class SwiftOpenVPNFlutterPlugin: NSObject, FlutterPlugin {
             case "stage":
                 result(SwiftOpenVPNFlutterPlugin.utils.currentStatus())
                 break
-                
+
             case "checkVpnPermission":
                 let providerBundleIdentifier: String? =
                     (call.arguments as? [String: Any])?["providerBundleIdentifier"] as? String
-                
+
                 if providerBundleIdentifier == nil {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing providerBundleIdentifier", details: nil))
+                    result(
+                        FlutterError(
+                            code: "INVALID_ARGUMENTS", message: "Missing providerBundleIdentifier",
+                            details: nil))
                     return
                 }
-                
+
                 SwiftOpenVPNFlutterPlugin.utils.checkVpnPermission(
                     providerBundleIdentifier: providerBundleIdentifier!,
                     result: result)
                 break
-                
+
             case "requestVpnPermission":
                 let providerBundleIdentifier: String? =
                     (call.arguments as? [String: Any])?["providerBundleIdentifier"] as? String
                 let localizedDescription: String? =
                     (call.arguments as? [String: Any])?["localizedDescription"] as? String
-                
+
                 if providerBundleIdentifier == nil {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing providerBundleIdentifier", details: nil))
+                    result(
+                        FlutterError(
+                            code: "INVALID_ARGUMENTS", message: "Missing providerBundleIdentifier",
+                            details: nil))
                     return
                 }
-                
+
                 let description = localizedDescription ?? "VPN"
-                
+
                 SwiftOpenVPNFlutterPlugin.utils.requestVpnPermission(
                     providerBundleIdentifier: providerBundleIdentifier!,
                     localizedDescription: description,
                     result: result)
                 break
-                
+
             case "initialize":
                 let providerBundleIdentifier: String? =
                     (call.arguments as? [String: Any])?["providerBundleIdentifier"] as? String
@@ -221,14 +227,17 @@ class VPNUtils {
     func checkVpnPermission(providerBundleIdentifier: String, result: @escaping FlutterResult) {
         NETunnelProviderManager.loadAllFromPreferences { managers, error in
             if let error = error {
-                result(FlutterError(code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
+                result(
+                    FlutterError(
+                        code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
                 return
             }
 
-            let exists = managers?.contains(where: { manager in
-                (manager.protocolConfiguration as? NETunnelProviderProtocol)?
-                    .providerBundleIdentifier == providerBundleIdentifier
-            }) ?? false
+            let exists =
+                managers?.contains(where: { manager in
+                    (manager.protocolConfiguration as? NETunnelProviderProtocol)?
+                        .providerBundleIdentifier == providerBundleIdentifier
+                }) ?? false
 
             result(exists)
         }
@@ -241,7 +250,9 @@ class VPNUtils {
     ) {
         NETunnelProviderManager.loadAllFromPreferences { managers, error in
             if let error = error {
-                result(FlutterError(code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
+                result(
+                    FlutterError(
+                        code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
                 return
             }
 
@@ -267,7 +278,10 @@ class VPNUtils {
 
             manager.saveToPreferences { saveError in
                 if let saveError = saveError {
-                    result(FlutterError(code: "SAVE_ERROR", message: saveError.localizedDescription, details: nil))
+                    result(
+                        FlutterError(
+                            code: "SAVE_ERROR", message: saveError.localizedDescription,
+                            details: nil))
                     return
                 }
 
@@ -283,14 +297,20 @@ class VPNUtils {
                 completion(error)
                 return
             }
-            
+
             guard let managers = managers else {
                 // No managers exist at all - this shouldn't happen after requestVpnPermission
                 print("OpenVPN: No VPN profiles found")
-                completion(NSError(domain: "OpenVPN", code: -1, userInfo: [NSLocalizedDescriptionKey: "No VPN profile found. Call requestVpnPermission first."]))
+                completion(
+                    NSError(
+                        domain: "OpenVPN", code: -1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "No VPN profile found. Call requestVpnPermission first."
+                        ]))
                 return
             }
-            
+
             // Find the manager with matching bundle identifier
             if let existingManager = managers.first(where: {
                 ($0.protocolConfiguration as? NETunnelProviderProtocol)?
@@ -303,14 +323,17 @@ class VPNUtils {
                 print("OpenVPN: Using first available VPN profile")
                 self.providerManager = managers[0]
             } else {
-                completion(NSError(domain: "OpenVPN", code: -1, userInfo: [NSLocalizedDescriptionKey: "No VPN profile available"]))
+                completion(
+                    NSError(
+                        domain: "OpenVPN", code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "No VPN profile available"]))
                 return
             }
-            
+
             // DO NOT save here - just use the existing manager
             // The profile was already created by requestVpnPermission
             // We'll update it when configureVPN is called
-            
+
             self.checkInitialVPNState()
             self.startConnectionMonitoring()
             completion(nil)
@@ -508,7 +531,7 @@ class VPNUtils {
                 completion(error)
                 return
             }
-            
+
             // Find our manager again (it might have been updated)
             if let manager = managers?.first(where: {
                 ($0.protocolConfiguration as? NETunnelProviderProtocol)?
@@ -518,7 +541,7 @@ class VPNUtils {
             } else if let manager = managers?.first {
                 self.providerManager = manager
             }
-            
+
             // Update the EXISTING protocol configuration
             let tunnelProtocol = NETunnelProviderProtocol()
             tunnelProtocol.serverAddress = self.localizedDescription ?? "VPN"
@@ -531,7 +554,7 @@ class VPNUtils {
                 "password": password?.data(using: .utf8) ?? nullData!,
             ]
             tunnelProtocol.disconnectOnSleep = false
-            
+
             self.providerManager.protocolConfiguration = tunnelProtocol
             self.providerManager.localizedDescription = self.localizedDescription
             self.providerManager.isEnabled = true
@@ -542,16 +565,16 @@ class VPNUtils {
                     completion(saveError)
                     return
                 }
-                
+
                 print("OpenVPN: Configuration saved, reloading manager...")
-                
+
                 // CRITICAL: Reload ALL managers again to ensure we have the absolute latest
                 NETunnelProviderManager.loadAllFromPreferences { reloadedManagers, reloadError in
                     if reloadError != nil {
                         completion(reloadError)
                         return
                     }
-                    
+
                     // Get the fresh manager instance
                     if let freshManager = reloadedManagers?.first(where: {
                         ($0.protocolConfiguration as? NETunnelProviderProtocol)?
@@ -560,10 +583,13 @@ class VPNUtils {
                         self.providerManager = freshManager
                         print("OpenVPN: Manager reloaded successfully")
                     } else {
-                        completion(NSError(domain: "OpenVPN", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to reload manager"]))
+                        completion(
+                            NSError(
+                                domain: "OpenVPN", code: -1,
+                                userInfo: [NSLocalizedDescriptionKey: "Failed to reload manager"]))
                         return
                     }
-                    
+
                     do {
                         if self.vpnStageObserver != nil {
                             NotificationCenter.default.removeObserver(

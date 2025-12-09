@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.VpnService;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -25,6 +26,8 @@ import io.flutter.plugin.common.PluginRegistry;
  */
 public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, PluginRegistry.ActivityResultListener {
 
+    private static final String TAG = "OpenVPNFlutter";
+    
     private MethodChannel vpnControlMethod;
     private EventChannel vpnStageEvent;
     private EventChannel.EventSink vpnStageSink;
@@ -56,6 +59,8 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
+        Log.d(TAG, "onAttachedToEngine");
+        
         vpnStageEvent = new EventChannel(binding.getBinaryMessenger(), EVENT_CHANNEL_VPN_STAGE);
         vpnControlMethod = new MethodChannel(binding.getBinaryMessenger(), METHOD_CHANNEL_VPN_CONTROL);
 
@@ -72,6 +77,7 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
         });
 
         vpnControlMethod.setMethodCallHandler((call, result) -> {
+            Log.d(TAG, "Method called: " + call.method);
 
             switch (call.method) {
                 case "status":
@@ -83,6 +89,7 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
                     break;
 
                 case "initialize":
+                    Log.d(TAG, "Initializing VPN Helper");
                     vpnHelper = new VPNHelper(activity);
                     vpnHelper.setOnVPNStatusChangeListener(new OnVPNStatusChangeListener() {
                         @Override
@@ -149,16 +156,17 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
                     break;
 
                 case "checkVpnPermission":
-                    // Android mein VPN permission check karna
+                    Log.d(TAG, "checkVpnPermission called");
                     checkVpnPermission(result);
                     break;
 
                 case "requestVpnPermission":
-                    // Android mein VPN permission request karna
+                    Log.d(TAG, "requestVpnPermission called");
                     requestVpnPermission(result);
                     break;
 
                 case "dispose":
+                    Log.d(TAG, "dispose called");
                     if (vpnHelper != null) {
                         vpnHelper.stopVPN();
                     }
@@ -177,6 +185,8 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
      * Check if VPN permission is already granted
      */
     private void checkVpnPermission(MethodChannel.Result result) {
+        Log.d(TAG, "checkVpnPermission: activity=" + (activity != null));
+        
         if (activity == null) {
             result.error("NO_ACTIVITY", "Activity is not available", null);
             return;
@@ -184,10 +194,12 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
 
         try {
             Intent intent = VpnService.prepare(activity);
-            // Agar intent null hai, matlab permission already granted hai
             boolean isGranted = (intent == null);
+            
+            Log.d(TAG, "checkVpnPermission: granted=" + isGranted);
             result.success(isGranted);
         } catch (Exception e) {
+            Log.e(TAG, "checkVpnPermission error: " + e.getMessage(), e);
             result.error("CHECK_ERROR", "Error checking VPN permission: " + e.getMessage(), null);
         }
     }
@@ -196,6 +208,8 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
      * Request VPN permission from user
      */
     private void requestVpnPermission(MethodChannel.Result result) {
+        Log.d(TAG, "requestVpnPermission: activity=" + (activity != null));
+        
         if (activity == null) {
             result.error("NO_ACTIVITY", "Activity is not available", null);
             return;
@@ -203,37 +217,81 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
 
         try {
             Intent intent = VpnService.prepare(activity);
+            Log.d(TAG, "requestVpnPermission: intent=" + (intent != null));
             
             if (intent == null) {
                 // Permission already granted
+                Log.d(TAG, "requestVpnPermission: already granted");
                 result.success(true);
                 return;
             }
 
-            // Permission chahiye, dialog show karenge
+            // Check if there's already a pending request
+            if (pendingPermissionResult != null) {
+                Log.w(TAG, "requestVpnPermission: Request already in progress");
+                result.error("REQUEST_IN_PROGRESS", "Permission request already in progress", null);
+                return;
+            }
+
+            // Store the result callback and show permission dialog
+            Log.d(TAG, "requestVpnPermission: Showing permission dialog");
             pendingPermissionResult = result;
             isCheckingPermission = true;
+            
             activity.startActivityForResult(intent, VPN_CHECK_PERMISSION_REQUEST_CODE);
             
         } catch (Exception e) {
-            result.error("REQUEST_ERROR", "Error requesting VPN permission: " + e.getMessage(), null);
+            Log.e(TAG, "requestVpnPermission error: " + e.getMessage(), e);
+            
+            // Clean up on error
+            if (pendingPermissionResult != null) {
+                pendingPermissionResult.error("REQUEST_ERROR", 
+                    "Error requesting VPN permission: " + e.getMessage(), null);
+                pendingPermissionResult = null;
+            }
+            isCheckingPermission = false;
+            
+            // If result was passed in and we didn't use pendingPermissionResult
+            if (result != null && result != pendingPermissionResult) {
+                result.error("REQUEST_ERROR", 
+                    "Error requesting VPN permission: " + e.getMessage(), null);
+            }
         }
     }
 
     @Override
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == VPN_CHECK_PERMISSION_REQUEST_CODE && isCheckingPermission) {
+        Log.d(TAG, "onActivityResult: requestCode=" + requestCode + 
+              ", resultCode=" + resultCode + ", RESULT_OK=" + Activity.RESULT_OK);
+        
+        // Handle permission check result
+        if (requestCode == VPN_CHECK_PERMISSION_REQUEST_CODE) {
+            Log.d(TAG, "onActivityResult: VPN_CHECK_PERMISSION_REQUEST_CODE");
+            
+            if (!isCheckingPermission) {
+                Log.w(TAG, "onActivityResult: Not expecting permission result");
+                return false;
+            }
+            
             isCheckingPermission = false;
             
             if (pendingPermissionResult != null) {
                 boolean granted = (resultCode == Activity.RESULT_OK);
+                Log.d(TAG, "onActivityResult: Permission granted=" + granted);
+                
                 pendingPermissionResult.success(granted);
                 pendingPermissionResult = null;
+            } else {
+                Log.w(TAG, "onActivityResult: pendingPermissionResult is null");
             }
+            
             return true;
         }
         
+        // Handle connection permission result
         if (requestCode == VPN_PERMISSION_REQUEST_CODE) {
+            Log.d(TAG, "onActivityResult: VPN_PERMISSION_REQUEST_CODE");
+            
             if (resultCode == Activity.RESULT_OK) {
                 connectWhileGranted(true);
             }
@@ -250,6 +308,7 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
 
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+        Log.d(TAG, "onDetachedFromEngine");
         vpnStageEvent.setStreamHandler(null);
         vpnControlMethod.setMethodCallHandler(null);
     }
@@ -264,13 +323,16 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
 
     @Override
     public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
+        Log.d(TAG, "onAttachedToActivity");
         activity = binding.getActivity();
         activityBinding = binding;
+        // CRITICAL: Register activity result listener
         binding.addActivityResultListener(this);
     }
 
     @Override
     public void onDetachedFromActivityForConfigChanges() {
+        Log.d(TAG, "onDetachedFromActivityForConfigChanges");
         if (activityBinding != null) {
             activityBinding.removeActivityResultListener(this);
         }
@@ -280,16 +342,29 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
 
     @Override
     public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding binding) {
+        Log.d(TAG, "onReattachedToActivityForConfigChanges");
         activity = binding.getActivity();
         activityBinding = binding;
+        // CRITICAL: Re-register activity result listener
         binding.addActivityResultListener(this);
     }
 
     @Override
     public void onDetachedFromActivity() {
+        Log.d(TAG, "onDetachedFromActivity");
         if (activityBinding != null) {
             activityBinding.removeActivityResultListener(this);
         }
+        
+        // Clean up any pending permission requests
+        if (pendingPermissionResult != null) {
+            Log.w(TAG, "onDetachedFromActivity: Cleaning up pending permission result");
+            pendingPermissionResult.error("ACTIVITY_DETACHED", 
+                "Activity detached while waiting for permission", null);
+            pendingPermissionResult = null;
+        }
+        isCheckingPermission = false;
+        
         activity = null;
         activityBinding = null;
     }
