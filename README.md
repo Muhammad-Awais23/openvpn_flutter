@@ -7,7 +7,7 @@ Connect to the OpenVPN service using Flutter. Contributions through issues and p
 #### Java
 Include the following code in the `onActivityResult` method of `MainActivity.java` (if you are using Java):
 
-```java
+```java kutti ka puter flutter
 OpenVPNFlutterPlugin.connectWhileGranted(requestCode == 24 && resultCode == RESULT_OK);
 ```
 
