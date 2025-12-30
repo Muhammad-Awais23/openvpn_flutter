@@ -56,7 +56,51 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
             vpnHelper.startVPN(config, username, password, name, bypassPackages);
         }
     }
+// Add this new method
+private void startBackgroundTimer(MethodChannel.Result result, MethodCall call) {
+    Log.d(TAG, "startBackgroundTimer called");
+    
+    if (activity == null) {
+        result.error("NO_ACTIVITY", "Activity is not available", null);
+        return;
+    }
 
+    try {
+        // Get parameters from Flutter
+        Integer durationSeconds = call.argument("duration_seconds");
+        Boolean isProUser = call.argument("is_pro_user");
+        
+        if (durationSeconds == null) {
+            durationSeconds = -1;
+        }
+        if (isProUser == null) {
+            isProUser = false;
+        }
+
+        Log.d(TAG, "Starting timer with duration: " + durationSeconds + 
+              ", isProUser: " + isProUser);
+
+        // Create intent to start timer monitoring in OpenVPNService
+        Intent intent = new Intent(activity, OpenVPNService.class);
+        intent.setAction("START_TIMER_MONITORING");
+        intent.putExtra("duration_seconds", durationSeconds);
+        intent.putExtra("is_pro_user", isProUser);
+        
+        // Start the service
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            activity.startForegroundService(intent);
+        } else {
+            activity.startService(intent);
+        }
+        
+        Log.d(TAG, "Timer monitoring service started");
+        result.success(true);
+        
+    } catch (Exception e) {
+        Log.e(TAG, "Error starting background timer: " + e.getMessage(), e);
+        result.error("TIMER_ERROR", "Failed to start timer: " + e.getMessage(), null);
+    }
+}
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
         Log.d(TAG, "onAttachedToEngine");
@@ -80,6 +124,10 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
             Log.d(TAG, "Method called: " + call.method);
 
             switch (call.method) {
+                case "startTimer":
+    Log.d(TAG, "startTimer called");
+    startBackgroundTimer(result, call);
+    break;
                 case "status":
                     if (vpnHelper == null) {
                         result.error("-1", "VPNEngine need to be initialize", "");
