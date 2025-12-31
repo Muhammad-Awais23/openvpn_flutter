@@ -80,12 +80,13 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
         } catch (Exception e) {
             Log.e(TAG, "Error starting timer from connectWhileGranted: " + e.getMessage());
         }
-    } else {
-        if (pendingPermissionResult != null) {
-            pendingPermissionResult.error("PERMISSION_DENIED", "VPN permission denied", null);
-            pendingPermissionResult = null;
-        }
-    }
+    } 
+    // else {
+    //     if (pendingPermissionResult != null) {
+    //         pendingPermissionResult.error("PERMISSION_DENIED", "VPN permission denied", null);
+    //         pendingPermissionResult = null;
+    //     }
+    // }
 }
 
 // Add this new method
