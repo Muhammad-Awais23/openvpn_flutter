@@ -31,7 +31,13 @@ allprojects {
 }
 
 apply plugin: 'com.android.library'
-
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
 android {
     namespace = 'id.laskarmedia.openvpn_flutter'
     compileSdkVersion 34
@@ -42,10 +48,17 @@ android {
     }
 
     defaultConfig {
-        minSdkVersion 16
+        minSdkVersion 21
     }
 }
 
 dependencies {
+    def flutterRoot = localProperties.getProperty('flutter.sdk')
+    if (flutterRoot == null) {
+        throw new FileNotFoundException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
+    }
+    compileOnly files("$flutterRoot/bin/cache/artifacts/engine/android-arm/flutter.jar")
+
     implementation 'com.github.Muhammad-Awais23:openvpn_library_custom:16a1348dad'
+    implementation 'androidx.annotation:annotation-jvm:1.9.1'
 }
