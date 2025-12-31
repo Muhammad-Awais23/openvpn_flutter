@@ -62,6 +62,8 @@ class _MyAppState extends State<MyApp> {
       username: defaultVpnUsername,
       password: defaultVpnPassword,
       certIsRequired: true,
+      allowedSeconds: 2,
+      isProUser: false,
     );
     if (!mounted) return;
   }

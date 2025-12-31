@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.VpnService;
 import android.os.Build;
 import android.util.Log;
@@ -50,14 +51,43 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
     private Context mContext;
 
     // Callbacks for permission requests
-    private MethodChannel.Result pendingPermissionResult;
+    private static MethodChannel.Result pendingPermissionResult;
     private boolean isCheckingPermission = false;
 
-    public static void connectWhileGranted(boolean granted) {
-        if (granted) {
-            vpnHelper.startVPN(config, username, password, name, bypassPackages);
+  public static void connectWhileGranted(boolean granted) {
+    if (granted) {
+        // START TIMER MONITORING IMMEDIATELY after VPN starts
+        Log.d(TAG, "connectWhileGranted - Starting VPN and timer monitoring");
+        vpnHelper.startVPN(config, username, password, name, bypassPackages);
+        
+        // Trigger timer monitoring in OpenVPNService
+        try {
+            SharedPreferences prefs = vpnHelper.activity.getSharedPreferences("vpn_timer_prefs", Context.MODE_PRIVATE);
+            int allowedSeconds = prefs.getInt("allowed_seconds", -1);
+            boolean isProUser = prefs.getBoolean("is_pro_user", false);
+            
+            Intent timerIntent = new Intent(vpnHelper.activity, OpenVPNService.class);
+            timerIntent.setAction("START_TIMER_MONITORING");
+            timerIntent.putExtra("duration_seconds", allowedSeconds);
+            timerIntent.putExtra("is_pro_user", isProUser);
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vpnHelper.activity.startForegroundService(timerIntent);
+            } else {
+                vpnHelper.activity.startService(timerIntent);
+            }
+            Log.d(TAG, "Timer service started from connectWhileGranted");
+        } catch (Exception e) {
+            Log.e(TAG, "Error starting timer from connectWhileGranted: " + e.getMessage());
+        }
+    } else {
+        if (pendingPermissionResult != null) {
+            pendingPermissionResult.error("PERMISSION_DENIED", "VPN permission denied", null);
+            pendingPermissionResult = null;
         }
     }
+}
+
 // Add this new method
 private void startBackgroundTimer(MethodChannel.Result result, MethodCall call) {
     Log.d(TAG, "startBackgroundTimer called");
@@ -162,31 +192,51 @@ private void startBackgroundTimer(MethodChannel.Result result, MethodCall call) 
                     updateStage("disconnected");
                     break;
 
-                case "connect":
-                    if (vpnHelper == null) {
-                        result.error("-1", "VPNEngine need to be initialize", "");
-                        return;
-                    }
+               case "connect":
+    Integer allowedSeconds = call.argument("allowed_seconds");
+    Boolean isProUser = call.argument("is_pro_user");
 
-                    config = call.argument("config");
-                    name = call.argument("name");
-                    username = call.argument("username");
-                    password = call.argument("password");
-                    bypassPackages = call.argument("bypass_packages");
+    // CRITICAL: Save timer preferences DURING connection (before permission request)
+    if (allowedSeconds != null) {
+        SharedPreferences prefs = activity.getSharedPreferences("vpn_timer_prefs", Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+        if (isProUser != null && isProUser) {
+            editor.putInt("allowed_seconds", -1);  // Unlimited for pro
+            editor.putBoolean("is_pro_user", true);
+        } else {
+            editor.putInt("allowed_seconds", allowedSeconds);
+            editor.putBoolean("is_pro_user", false);
+            editor.putLong("connection_start_time", System.currentTimeMillis());  // Set start time NOW
+        }
+        editor.apply();
+        Log.d(TAG, "Timer prefs saved during connect: seconds=" + allowedSeconds + ", pro=" + isProUser);
+    }
 
-                    if (config == null) {
-                        result.error("-2", "OpenVPN Config is required", "");
-                        return;
-                    }
+    if (vpnHelper == null) {
+        result.error("-1", "VPNEngine need to be initialize", "");
+        return;
+    }
 
-                    final Intent permission = VpnService.prepare(activity);
-                    if (permission != null) {
-                        activity.startActivityForResult(permission, VPN_PERMISSION_REQUEST_CODE);
-                        return;
-                    }
-                    vpnHelper.startVPN(config, username, password, name, bypassPackages);
-                    break;
+    config = call.argument("config");
+    name = call.argument("name");
+    username = call.argument("username");
+    password = call.argument("password");
+    bypassPackages = call.argument("bypass_packages");
 
+    if (config == null) {
+        result.error("-2", "OpenVPN Config is required", "");
+        return;
+    }
+
+    final Intent permission = VpnService.prepare(activity);
+    if (permission != null) {
+        pendingPermissionResult = result;  // Store result for connectWhileGranted
+        activity.startActivityForResult(permission, VPN_PERMISSION_REQUEST_CODE);
+        return;
+    }
+    connectWhileGranted(true);  // Proceed directly if permission already granted
+    result.success(true);
+    break;
                 case "stage":
                     if (vpnHelper == null) {
                         result.error("-1", "VPNEngine need to be initialize", "");
