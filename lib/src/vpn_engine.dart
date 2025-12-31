@@ -432,6 +432,36 @@ class OpenVPN {
     initialized = false;
   }
 
+  Future<bool> startTimer(int durationSeconds, {bool isProUser = false}) async {
+    try {
+      if (!initialized) {
+        throw Exception("OpenVPN needs to be initialized first");
+      }
+
+      print('startTimer called - Duration: $durationSeconds, Pro: $isProUser');
+
+      // iOS handled by Network Extension
+      if (Platform.isIOS) {
+        return true;
+      }
+
+      // Android - call platform method
+      if (Platform.isAndroid) {
+        final bool? result = await _channelControl.invokeMethod('startTimer', {
+          'duration_seconds': durationSeconds,
+          'is_pro_user': isProUser,
+        });
+
+        return result ?? false;
+      }
+
+      return false;
+    } catch (e) {
+      print('Error in startTimer: $e');
+      return false;
+    }
+  }
+
   ///Convert duration that produced by native side as Connection Time
   String _duration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
