@@ -47,5 +47,5 @@ android {
 }
 
 dependencies {
-    implementation project(':openvpn_library_16kb')
+    implementation 'com.github.Muhammad-Awais23:openvpn_library_custom:16a1348dad'
 }
