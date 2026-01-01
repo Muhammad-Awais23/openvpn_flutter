@@ -131,7 +131,7 @@ private void updateVpnTimer(MethodChannel.Result result, MethodCall call) {
             return;
         }
         
-        if (!currentStatus.equals("connected")) {
+        if (!currentStatus.equalsIgnoreCase("connected")) {
             Log.e(TAG, "❌ VPN not connected (status: " + currentStatus + "), skipping timer update");
             result.success(false);
             return;
