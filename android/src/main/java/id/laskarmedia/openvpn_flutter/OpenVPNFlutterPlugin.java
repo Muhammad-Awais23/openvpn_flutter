@@ -88,78 +88,130 @@ public class OpenVPNFlutterPlugin implements FlutterPlugin, ActivityAware, Plugi
     //     }
     // }
 }
-    private void updateVpnTimer(MethodChannel.Result result, MethodCall call) {
-        Log.d(TAG, "updateVpnTimer called");
+private void updateVpnTimer(MethodChannel.Result result, MethodCall call) {
+    Log.d(TAG, "🔄 ========== updateVpnTimer START ==========");
+    Log.d(TAG, "🔄 Thread: " + Thread.currentThread().getName());
+    Log.d(TAG, "🔄 Timestamp: " + System.currentTimeMillis());
 
-        if (activity == null) {
-            result.error("NO_ACTIVITY", "Activity is not available", null);
+    if (activity == null) {
+        Log.e(TAG, "❌ Activity is not available");
+        result.error("NO_ACTIVITY", "Activity is not available", null);
+        return;
+    }
+
+    try {
+        // Get new duration from Flutter
+        Integer newDurationSeconds = call.argument("duration_seconds");
+        Boolean isProUser = call.argument("is_pro_user");
+
+        Log.d(TAG, "📥 RAW arguments from Flutter:");
+        Log.d(TAG, "   - duration_seconds: " + newDurationSeconds);
+        Log.d(TAG, "   - is_pro_user: " + isProUser);
+
+        if (newDurationSeconds == null) {
+            newDurationSeconds = -1;
+            Log.d(TAG, "⚠️ duration_seconds was null, set to -1");
+        }
+        if (isProUser == null) {
+            isProUser = false;
+            Log.d(TAG, "⚠️ is_pro_user was null, set to false");
+        }
+
+        Log.d(TAG, "📊 PROCESSED values:");
+        Log.d(TAG, "   - newDurationSeconds: " + newDurationSeconds);
+        Log.d(TAG, "   - isProUser: " + isProUser);
+
+        // ✅ Check if VPN is actually connected
+        String currentStatus = OpenVPNService.getStatus();
+        Log.d(TAG, "📊 Current VPN status: '" + currentStatus + "'");
+        
+        if (currentStatus == null) {
+            Log.e(TAG, "❌ VPN status is NULL");
+            result.success(false);
+            return;
+        }
+        
+        if (!currentStatus.equals("connected")) {
+            Log.e(TAG, "❌ VPN not connected (status: " + currentStatus + "), skipping timer update");
+            result.success(false);
             return;
         }
 
-        try {
-            // Get new duration from Flutter
-            Integer newDurationSeconds = call.argument("duration_seconds");
-            Boolean isProUser = call.argument("is_pro_user");
+        Log.d(TAG, "✅ VPN is connected, proceeding with update");
 
-            if (newDurationSeconds == null) {
-                newDurationSeconds = -1;
-            }
-            if (isProUser == null) {
-                isProUser = false;
-            }
+        // Save to shared preferences
+        SharedPreferences prefs = activity.getSharedPreferences("VPNTimerPrefs", Context.MODE_PRIVATE);
+        
+        // Log BEFORE values
+        Log.d(TAG, "📊 BEFORE update - SharedPreferences:");
+        Log.d(TAG, "   - allowed_duration_seconds: " + prefs.getInt("allowed_duration_seconds", -999));
+        Log.d(TAG, "   - connection_start_time: " + prefs.getLong("connection_start_time", -999));
+        Log.d(TAG, "   - is_pro_user: " + prefs.getBoolean("is_pro_user", false));
+        
+        long currentTime = System.currentTimeMillis();
+        Log.d(TAG, "⏰ Current time: " + currentTime);
+        
+        // Calculate elapsed time
+        long oldStartTime = prefs.getLong("connection_start_time", currentTime);
+        long elapsedSeconds = (currentTime - oldStartTime) / 1000;
+        Log.d(TAG, "📊 Time elapsed since original connection: " + elapsedSeconds + " seconds");
+        
+        SharedPreferences.Editor editor = prefs.edit();
 
-            Log.d(TAG, "Updating timer: duration=" + newDurationSeconds +
-                    " seconds, isProUser=" + isProUser);
-
-            // ✅ Check if VPN is actually connected
-            String currentStatus = OpenVPNService.getStatus();
-            if (currentStatus == null || !currentStatus.equals("connected")) {
-                Log.d(TAG, "⚠️ VPN not connected, skipping timer update");
-                result.success(false);
-                return;
-            }
-
-            // Save to shared preferences
-            SharedPreferences prefs = activity.getSharedPreferences("VPNTimerPrefs", Context.MODE_PRIVATE);
-            SharedPreferences.Editor editor = prefs.edit();
-
-            if (isProUser) {
-                // Pro user - unlimited time
-                editor.putInt("allowed_duration_seconds", -1);
-                editor.putBoolean("is_pro_user", true);
-                Log.d(TAG, "Updated to Pro user - unlimited time");
-            } else {
-                // Regular user - update with new duration
-                // CRITICAL: Reset start time to NOW when adding time
-                long currentTime = System.currentTimeMillis();
-                editor.putInt("allowed_duration_seconds", newDurationSeconds);
-                editor.putLong("connection_start_time", currentTime);
-                editor.putBoolean("is_pro_user", false);
-                Log.d(TAG, "Updated timer: " + newDurationSeconds + " seconds from now");
-            }
-
-            editor.apply();
-
-            // Send broadcast to OpenVPNService to update its timer
-            Intent updateIntent = new Intent(activity, OpenVPNService.class);
-            updateIntent.setAction("UPDATE_TIMER");
-            updateIntent.putExtra("duration_seconds", newDurationSeconds);
-            updateIntent.putExtra("is_pro_user", isProUser);
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                activity.startForegroundService(updateIntent);
-            } else {
-                activity.startService(updateIntent);
-            }
-
-            Log.d(TAG, "✅ Timer update broadcast sent to OpenVPNService");
-            result.success(true);
-
-        } catch (Exception e) {
-            Log.e(TAG, "❌ Error updating timer: " + e.getMessage(), e);
-            result.error("UPDATE_ERROR", "Failed to update timer: " + e.getMessage(), null);
+        if (isProUser) {
+            Log.d(TAG, "🌟 User is PRO - setting unlimited time");
+            editor.putInt("allowed_duration_seconds", -1);
+            editor.putBoolean("is_pro_user", true);
+        } else {
+            Log.d(TAG, "⏱️ Regular user - updating timer");
+            Log.d(TAG, "   - Setting NEW total duration: " + newDurationSeconds + " seconds");
+            Log.d(TAG, "   - RESETTING start time to NOW: " + currentTime);
+            
+            editor.putInt("allowed_duration_seconds", newDurationSeconds);
+            editor.putLong("connection_start_time", currentTime); // ✅ CRITICAL: Reset to NOW
+            editor.putBoolean("is_pro_user", false);
+            
+            Log.d(TAG, "   - This gives user " + newDurationSeconds + " seconds from NOW");
         }
+
+        boolean commitSuccess = editor.commit(); // Use commit() instead of apply() to ensure it's synchronous
+        Log.d(TAG, "💾 Preferences commit result: " + commitSuccess);
+
+        // Log AFTER values
+        Log.d(TAG, "📊 AFTER update - SharedPreferences:");
+        Log.d(TAG, "   - allowed_duration_seconds: " + prefs.getInt("allowed_duration_seconds", -999));
+        Log.d(TAG, "   - connection_start_time: " + prefs.getLong("connection_start_time", -999));
+        Log.d(TAG, "   - is_pro_user: " + prefs.getBoolean("is_pro_user", false));
+
+        // Send broadcast to OpenVPNService
+        Log.d(TAG, "📡 Preparing to send UPDATE_TIMER broadcast to OpenVPNService");
+        Intent updateIntent = new Intent(activity, OpenVPNService.class);
+        updateIntent.setAction("UPDATE_TIMER");
+        updateIntent.putExtra("duration_seconds", newDurationSeconds);
+        updateIntent.putExtra("is_pro_user", isProUser);
+        
+        Log.d(TAG, "📡 Intent extras:");
+        Log.d(TAG, "   - duration_seconds: " + updateIntent.getIntExtra("duration_seconds", -999));
+        Log.d(TAG, "   - is_pro_user: " + updateIntent.getBooleanExtra("is_pro_user", false));
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Log.d(TAG, "📡 Starting foreground service (Android O+)");
+            activity.startForegroundService(updateIntent);
+        } else {
+            Log.d(TAG, "📡 Starting service");
+            activity.startService(updateIntent);
+        }
+
+        Log.d(TAG, "✅ Timer update broadcast sent successfully");
+        Log.d(TAG, "========== updateVpnTimer END ==========");
+        result.success(true);
+
+    } catch (Exception e) {
+        Log.e(TAG, "❌ EXCEPTION in updateVpnTimer: " + e.getMessage());
+        Log.e(TAG, "❌ Stack trace:", e);
+        result.error("UPDATE_ERROR", "Failed to update timer: " + e.getMessage(), null);
     }
+}
 // Add this new method
 private void startBackgroundTimer(MethodChannel.Result result, MethodCall call) {
     Log.d(TAG, "startBackgroundTimer called");
