@@ -312,12 +312,37 @@ case "updateTimer":
                     break;
 
                 case "disconnect":
-                    if (vpnHelper == null)
-                        result.error("-1", "VPNEngine need to be initialize", "");
+    Log.d(TAG, "🛑 ========== DISCONNECT CALLED ==========");
+    if (vpnHelper == null) {
+        Log.e(TAG, "VPNEngine not initialized");
+        result.error("-1", "VPNEngine need to be initialize", "");
+        return;
+    }
 
-                    vpnHelper.stopVPN();
-                    updateStage("disconnected");
-                    break;
+    try {
+        // Stop VPN
+        vpnHelper.stopVPN();
+        
+        // Update stage immediately
+        updateStage("disconnected");
+        
+        // Clear timer preferences
+        SharedPreferences prefs = activity.getSharedPreferences("VPNTimerPrefs", Context.MODE_PRIVATE);
+        prefs.edit().clear().commit();
+        Log.d(TAG, "Timer preferences cleared");
+        
+        // Send intent to OpenVPNService to force cleanup
+        Intent disconnectIntent = new Intent(activity, OpenVPNService.class);
+        disconnectIntent.setAction("FORCE_DISCONNECT_AND_CLEANUP");
+        activity.startService(disconnectIntent);
+        
+        Log.d(TAG, "✅ Disconnect completed successfully");
+        result.success(null);
+    } catch (Exception e) {
+        Log.e(TAG, "❌ Error during disconnect: " + e.getMessage(), e);
+        result.error("DISCONNECT_ERROR", e.getMessage(), null);
+    }
+    break;
 
                case "connect":
     Integer allowedSeconds = call.argument("allowed_seconds");
