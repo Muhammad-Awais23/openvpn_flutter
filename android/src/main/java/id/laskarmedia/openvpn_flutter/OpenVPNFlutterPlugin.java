@@ -311,7 +311,7 @@ case "updateTimer":
                     result.success(updateVPNStages());
                     break;
 
-                case "disconnect":
+           case "disconnect":
     Log.d(TAG, "🛑 ========== DISCONNECT CALLED ==========");
     if (vpnHelper == null) {
         Log.e(TAG, "VPNEngine not initialized");
@@ -323,8 +323,11 @@ case "updateTimer":
         // Stop VPN
         vpnHelper.stopVPN();
         
-        // Update stage immediately
-        updateStage("disconnected");
+        // ✅ CRITICAL: Force reset the status
+        OpenVPNService.setDefaultStatus(); // This sets it to "idle"
+        
+        // Update stage to idle
+        updateStage("idle");
         
         // Clear timer preferences
         SharedPreferences prefs = activity.getSharedPreferences("VPNTimerPrefs", Context.MODE_PRIVATE);
@@ -336,10 +339,20 @@ case "updateTimer":
         disconnectIntent.setAction("FORCE_DISCONNECT_AND_CLEANUP");
         activity.startService(disconnectIntent);
         
+        // ✅ Wait a moment for cleanup, then ensure stage is updated
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            OpenVPNService.setDefaultStatus();
+            updateStage("idle");
+            Log.d(TAG, "✅ Stage reset to idle after cleanup");
+        }, 500);
+        
         Log.d(TAG, "✅ Disconnect completed successfully");
         result.success(null);
     } catch (Exception e) {
         Log.e(TAG, "❌ Error during disconnect: " + e.getMessage(), e);
+        // ✅ Even on error, reset state
+        OpenVPNService.setDefaultStatus();
+        updateStage("idle");
         result.error("DISCONNECT_ERROR", e.getMessage(), null);
     }
     break;
