@@ -271,30 +271,37 @@ class OpenVPN {
   ///[username] & [password]: set your username and password if your config file has auth-user-pass
   ///
   ///[bypassPackages]: exclude some apps to access/use the VPN Connection (Android Only)
-  Future connect(String config, String name,
-      {String? username,
-      String? password,
-      List<String>? bypassPackages,
-      required int allowedSeconds,
-      required bool isProUser,
-      bool certIsRequired = false}) {
+  Future connect(
+    String config,
+    String name, {
+    String? username,
+    String? password,
+    List<String>? bypassPackages,
+    required int allowedSeconds,
+    required bool isProUser,
+    bool certIsRequired = false,
+  }) {
     if (!initialized) throw ("OpenVPN need to be initialized");
-    if (!certIsRequired) config += "client-cert-not-required";
+
+    if (!certIsRequired) {
+      config += "client-cert-not-required";
+    }
+
     _tempDateTime = DateTime.now();
 
-    try {
-      return _channelControl.invokeMethod("connect", {
-        "config": config,
-        "name": name,
-        "username": username,
-        "password": password,
-        "bypass_packages": bypassPackages ?? [],
-        "allowed_seconds": allowedSeconds,
-        "is_pro_user": isProUser
-      });
-    } on PlatformException catch (e) {
-      throw ArgumentError(e.message);
+    if (Platform.isAndroid) {
+      _startConnectionTimeout();
     }
+
+    return _channelControl.invokeMethod("connect", {
+      "config": config,
+      "name": name,
+      "username": username,
+      "password": password,
+      "bypass_packages": bypassPackages ?? [],
+      "allowed_seconds": allowedSeconds,
+      "is_pro_user": isProUser,
+    });
   }
 
   ///Disconnect from VPN
@@ -511,42 +518,52 @@ class OpenVPN {
   ///Initialize listener
   void _initializeListener() {
     _vpnStageSnapshot().listen((event) {
-      var vpnStage = _strToStage(event);
-      if (vpnStage != _lastStage) {
-        onVpnStageChanged?.call(vpnStage, event);
-        _lastStage = vpnStage;
+      final vpnStage = _strToStage(event);
+      final previousStage = _lastStage;
 
-        if (vpnStage == VPNStage.connecting ||
-            vpnStage == VPNStage.authenticating ||
-            vpnStage == VPNStage.prepare ||
-            vpnStage == VPNStage.wait_connection) {
-          _startConnectionTimeout();
-        } else if (vpnStage == VPNStage.connected) {
-          _cancelConnectionTimeout();
-        } else if (vpnStage == VPNStage.disconnected ||
-            vpnStage == VPNStage.error ||
-            vpnStage == VPNStage.denied) {
-          _cancelConnectionTimeout();
+      if (vpnStage != previousStage) {
+        _lastStage = vpnStage;
+        onVpnStageChanged?.call(vpnStage, event);
+
+        if (Platform.isAndroid) {
+          if (vpnStage == VPNStage.connecting) {
+            _startConnectionTimeout();
+          } else if (vpnStage == VPNStage.connected ||
+              vpnStage == VPNStage.disconnected ||
+              vpnStage == VPNStage.error ||
+              vpnStage == VPNStage.denied) {
+            _cancelConnectionTimeout();
+          }
+        } else {
+          if (vpnStage == VPNStage.connecting ||
+              vpnStage == VPNStage.authenticating ||
+              vpnStage == VPNStage.prepare ||
+              vpnStage == VPNStage.wait_connection) {
+            _startConnectionTimeout();
+          } else if (vpnStage == VPNStage.connected ||
+              vpnStage == VPNStage.disconnected ||
+              vpnStage == VPNStage.error ||
+              vpnStage == VPNStage.denied) {
+            _cancelConnectionTimeout();
+          }
         }
 
         if (Platform.isIOS && _autoReconnectEnabled) {
           if (vpnStage == VPNStage.connecting) {
             onAutoReconnectEvent?.call("Attempting to reconnect...");
           } else if (vpnStage == VPNStage.connected &&
-              _lastStage == VPNStage.connecting) {
+              previousStage == VPNStage.connecting) {
             onAutoReconnectEvent?.call("Auto-reconnect successful");
           }
         }
       }
 
-      if (vpnStage != VPNStage.disconnected) {
-        if (Platform.isAndroid) {
-          _createTimer();
-        } else if (Platform.isIOS && vpnStage == VPNStage.connected) {
-          _createTimer();
-        }
+      if (vpnStage == VPNStage.connected ||
+          (Platform.isAndroid && vpnStage != VPNStage.disconnected)) {
+        _createTimer();
       } else {
         _vpnStatusTimer?.cancel();
+        _vpnStatusTimer = null;
       }
     });
   }
