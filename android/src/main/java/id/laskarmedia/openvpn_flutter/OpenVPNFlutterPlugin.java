@@ -311,7 +311,7 @@ case "updateTimer":
                     result.success(updateVPNStages());
                     break;
 
-               case "disconnect":
+          case "disconnect":
     Log.d(TAG, "🛑 ========== DISCONNECT CALLED ==========");
     if (vpnHelper == null) {
         Log.e(TAG, "VPNEngine not initialized");
@@ -320,37 +320,21 @@ case "updateTimer":
     }
 
     try {
-        // ✅ CRITICAL: Stop VPN FIRST
+        // Stop VPN
         vpnHelper.stopVPN();
         
-        // ✅ CRITICAL: Give it time to actually stop
-        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-            try {
-                // Clear timer preferences
-                SharedPreferences prefs = activity.getSharedPreferences("VPNTimerPrefs", Context.MODE_PRIVATE);
-                prefs.edit().clear().commit();
-                Log.d(TAG, "Timer preferences cleared");
-
-                // Send intent to OpenVPNService to force cleanup
-                Intent disconnectIntent = new Intent(activity, OpenVPNService.class);
-                disconnectIntent.setAction("FORCE_DISCONNECT_AND_CLEANUP");
-                activity.startService(disconnectIntent);
-                
-                // ✅ CRITICAL: Update stage to disconnected AFTER cleanup
-                updateStage("disconnected");
-                Log.d(TAG, "✅ Stage set to disconnected after cleanup");
-                
-            } catch (Exception e) {
-                Log.e(TAG, "Error in delayed disconnect cleanup: " + e.getMessage());
-            }
-        }, 1000); // Wait 1 second for VPN to stop
-
-        Log.d(TAG, "✅ Disconnect initiated successfully");
+        // Update stage
+        updateStage("disconnected");
+        
+        // Clear timer preferences
+        SharedPreferences prefs = activity.getSharedPreferences("VPNTimerPrefs", Context.MODE_PRIVATE);
+        prefs.edit().clear().commit();
+        
+        Log.d(TAG, "✅ Disconnect completed successfully");
         result.success(null);
         
     } catch (Exception e) {
         Log.e(TAG, "❌ Error during disconnect: " + e.getMessage(), e);
-        // Even on error, try to set to disconnected
         updateStage("disconnected");
         result.error("DISCONNECT_ERROR", e.getMessage(), null);
     }
