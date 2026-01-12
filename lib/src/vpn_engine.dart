@@ -64,6 +64,18 @@ class OpenVPN {
   /// Track if auto-reconnect is enabled
   bool _autoReconnectEnabled = false;
 
+  /// Track when connection attempt started (to prevent timeout reset on reconnect)
+  DateTime? _connectionAttemptStartTime;
+
+  /// Track if we're in a connection attempt (connecting or reconnecting)
+  bool _isConnectionAttempt = false;
+
+  /// Track number of reconnect attempts
+  int _reconnectAttempts = 0;
+
+  /// Maximum reconnect attempts before giving up
+  int _maxReconnectAttempts = 5;
+
   /// is a listener to see vpn status detail
   final Function(VpnStatus? data)? onVpnStatusChanged;
 
@@ -85,16 +97,6 @@ class OpenVPN {
   });
 
   /// Check if VPN permission is granted
-  ///
-  /// For iOS: Checks if VPN profile exists
-  /// For Android: Checks if VpnService.prepare() returns null (meaning permission granted)
-  ///
-  /// Returns true if VPN permission is granted, false otherwise
-  ///
-  /// [providerBundleIdentifier] is required for iOS (Network Extension identifier)
-  /// For Android, this parameter is ignored
-  ///
-  /// This should be called BEFORE initialize() to check if permission is already granted
   static Future<bool> checkVpnPermission({
     String? providerBundleIdentifier,
   }) async {
@@ -127,19 +129,6 @@ class OpenVPN {
   }
 
   /// Request VPN permission
-  ///
-  /// For iOS: Creates a VPN profile if it doesn't exist and triggers the iOS permission dialog
-  /// For Android: Shows the VPN permission dialog using VpnService.prepare()
-  ///
-  /// Returns true if permission granted/already exists, false otherwise
-  ///
-  /// [providerBundleIdentifier]: Required for iOS (Your Network Extension identifier)
-  /// [localizedDescription]: Description shown in iOS Settings (default: "VPN")
-  ///
-  /// For Android, only the permission dialog is shown, no additional parameters needed
-  ///
-  /// This creates a VPN profile (iOS) or requests permission (Android) if not already granted
-  /// Should be called BEFORE initialize() if permission is not yet granted
   static Future<bool> requestVpnPermission({
     String? providerBundleIdentifier,
     String localizedDescription = "VPN",
@@ -174,26 +163,14 @@ class OpenVPN {
     return false;
   }
 
-  ///This function should be called before any usage of OpenVPN
-  ///All params required for iOS, make sure you read the plugin's documentation
-  ///
-  ///[providerBundleIdentifier] is for your Network Extension identifier (iOS only)
-  ///
-  ///[localizedDescription] is for description to show in user's settings (iOS only)
-  ///
-  ///[groupIdentifier] is for App Group identifier (iOS only)
-  ///
-  ///[autoReconnect] enables automatic reconnection when VPN is disconnected (iOS only)
-  ///
-  ///[connectionTimeout] is the duration to wait before timing out (default: 20 seconds)
-  ///
-  ///Will return latest VPNStage
+  ///Initialize OpenVPN
   Future<void> initialize({
     String? providerBundleIdentifier,
     String? localizedDescription,
     String? groupIdentifier,
     bool autoReconnect = false,
     Duration? connectionTimeout,
+    int maxReconnectAttempts = 5,
     Function(VpnStatus status)? lastStatus,
     Function(VPNStage stage)? lastStage,
   }) async {
@@ -206,6 +183,7 @@ class OpenVPN {
     }
 
     _autoReconnectEnabled = autoReconnect;
+    _maxReconnectAttempts = maxReconnectAttempts;
     if (connectionTimeout != null) {
       _connectionTimeout = connectionTimeout;
     }
@@ -232,7 +210,6 @@ class OpenVPN {
   }
 
   /// Set auto-reconnect feature on/off at runtime
-  /// Only works on iOS
   Future<void> setAutoReconnect({required bool enabled}) async {
     if (!initialized) throw ("OpenVPN need to be initialized");
     if (!Platform.isIOS) {
@@ -261,16 +238,6 @@ class OpenVPN {
   Duration get connectionTimeout => _connectionTimeout;
 
   ///Connect to VPN
-  ///
-  ///[config]: Your openvpn configuration script, you can find it inside your .ovpn file
-  ///
-  ///[name]: name that will show in user's notification
-  ///
-  ///[certIsRequired]: default is false, if your config file has cert, set it to true
-  ///
-  ///[username] & [password]: set your username and password if your config file has auth-user-pass
-  ///
-  ///[bypassPackages]: exclude some apps to access/use the VPN Connection (Android Only)
   Future connect(
     String config,
     String name, {
@@ -288,10 +255,8 @@ class OpenVPN {
     }
 
     _tempDateTime = DateTime.now();
-
-    if (Platform.isAndroid) {
-      _startConnectionTimeout();
-    }
+    _reconnectAttempts = 0; // Reset reconnect attempts on new connection
+    _startConnectionAttempt(); // Start tracking connection attempt
 
     return _channelControl.invokeMethod("connect", {
       "config": config,
@@ -307,7 +272,7 @@ class OpenVPN {
   ///Disconnect from VPN
   void disconnect() {
     _tempDateTime = null;
-    _cancelConnectionTimeout();
+    _endConnectionAttempt(); // Clear connection attempt tracking
     _channelControl.invokeMethod("disconnect");
     if (_vpnStatusTimer?.isActive ?? false) {
       _vpnStatusTimer?.cancel();
@@ -397,8 +362,6 @@ class OpenVPN {
   }
 
   ///Request android permission (Return true if already granted)
-  ///
-  ///DEPRECATED: Use [checkVpnPermission] and [requestVpnPermission] instead
   @Deprecated('Use checkVpnPermission() and requestVpnPermission() instead')
   Future<bool> requestPermissionAndroid() async {
     return _channelControl
@@ -406,9 +369,7 @@ class OpenVPN {
         .then((value) => value ?? false);
   }
 
-  ///Sometimes config script has too many Remotes, it cause ANR in several devices
-  ///
-  ///Use this function if you wanted to force user to use 1 remote by randomize the remotes
+  ///Filter config to use single random remote
   static Future<String?> filteredConfig(String? config) async {
     List<String> remotes = [];
     List<String> output = [];
@@ -436,44 +397,14 @@ class OpenVPN {
   void dispose() {
     _vpnStatusTimer?.cancel();
     _vpnStatusTimer = null;
-    _cancelConnectionTimeout();
+    _endConnectionAttempt();
     if (initialized) {
       _channelControl.invokeMethod("dispose");
     }
     initialized = false;
   }
 
-  // Future<bool> startTimer(int durationSeconds, {bool isProUser = false}) async {
-  //   try {
-  //     if (!initialized) {
-  //       throw Exception("OpenVPN needs to be initialized first");
-  //     }
-
-  //     print('startTimer called - Duration: $durationSeconds, Pro: $isProUser');
-
-  //     // iOS handled by Network Extension
-  //     if (Platform.isIOS) {
-  //       return true;
-  //     }
-
-  //     // Android - call platform method
-  //     if (Platform.isAndroid) {
-  //       final bool? result = await _channelControl.invokeMethod('startTimer', {
-  //         'duration_seconds': durationSeconds,
-  //         'is_pro_user': isProUser,
-  //       });
-
-  //       return result ?? false;
-  //     }
-
-  //     return false;
-  //   } catch (e) {
-  //     print('Error in startTimer: $e');
-  //     return false;
-  //   }
-  // }
-
-  ///Convert duration that produced by native side as Connection Time
+  ///Convert duration to readable format
   String _duration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
     String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
@@ -481,7 +412,7 @@ class OpenVPN {
     return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
   }
 
-  ///Private function to convert String to VPNStage
+  ///Convert String to VPNStage
   static VPNStage _strToStage(String? stage) {
     if (stage == null ||
         stage.trim().isEmpty ||
@@ -498,13 +429,64 @@ class OpenVPN {
     return VPNStage.unknown;
   }
 
-  ///Start connection timeout timer
-  void _startConnectionTimeout() {
+  /// Start tracking a connection attempt
+  void _startConnectionAttempt() {
+    if (!_isConnectionAttempt) {
+      _connectionAttemptStartTime = DateTime.now();
+      _isConnectionAttempt = true;
+      print('🔵 Connection attempt started at ${_connectionAttemptStartTime}');
+    }
+    _startOrCheckConnectionTimeout();
+  }
+
+  /// End connection attempt tracking
+  void _endConnectionAttempt() {
+    _isConnectionAttempt = false;
+    _connectionAttemptStartTime = null;
+    _reconnectAttempts = 0;
     _cancelConnectionTimeout();
-    _connectionTimeoutTimer = Timer(_connectionTimeout, () {
-      disconnect();
-      onConnectionTimeout?.call();
+    print('🔴 Connection attempt ended');
+  }
+
+  /// Start or check connection timeout based on total elapsed time
+  void _startOrCheckConnectionTimeout() {
+    // Cancel any existing timer
+    _connectionTimeoutTimer?.cancel();
+
+    if (!_isConnectionAttempt || _connectionAttemptStartTime == null) {
+      return;
+    }
+
+    // Calculate how much time has elapsed since the first connection attempt
+    final elapsedTime = DateTime.now().difference(_connectionAttemptStartTime!);
+    final remainingTime = _connectionTimeout - elapsedTime;
+
+    print(
+        '⏱️ Timeout check - Elapsed: ${elapsedTime.inSeconds}s, Remaining: ${remainingTime.inSeconds}s, Attempts: $_reconnectAttempts/$_maxReconnectAttempts');
+
+    // Check if we've exceeded the timeout OR max reconnect attempts
+    if (remainingTime <= Duration.zero ||
+        _reconnectAttempts >= _maxReconnectAttempts) {
+      print('❌ Connection timeout reached!');
+      _handleConnectionTimeout();
+      return;
+    }
+
+    // Set timer for remaining time
+    _connectionTimeoutTimer = Timer(remainingTime, () {
+      print('❌ Connection timeout triggered!');
+      _handleConnectionTimeout();
     });
+  }
+
+  /// Handle connection timeout
+  void _handleConnectionTimeout() {
+    print('🚫 Handling connection timeout - disconnecting...');
+    _endConnectionAttempt();
+    disconnect();
+    onConnectionTimeout?.call();
+    onAutoReconnectEvent?.call(
+        "Connection timeout - giving up after $_reconnectAttempts attempts");
   }
 
   ///Cancel connection timeout timer
@@ -512,6 +494,7 @@ class OpenVPN {
     if (_connectionTimeoutTimer?.isActive ?? false) {
       _connectionTimeoutTimer?.cancel();
       _connectionTimeoutTimer = null;
+      print('⏹️ Connection timeout cancelled');
     }
   }
 
@@ -525,39 +508,47 @@ class OpenVPN {
         _lastStage = vpnStage;
         onVpnStageChanged?.call(vpnStage, event);
 
-        if (Platform.isAndroid) {
-          if (vpnStage == VPNStage.connecting) {
-            _startConnectionTimeout();
-          } else if (vpnStage == VPNStage.connected ||
-              vpnStage == VPNStage.disconnected ||
-              vpnStage == VPNStage.error ||
-              vpnStage == VPNStage.denied) {
-            _cancelConnectionTimeout();
-          }
-        } else {
-          if (vpnStage == VPNStage.connecting ||
-              vpnStage == VPNStage.authenticating ||
-              vpnStage == VPNStage.prepare ||
-              vpnStage == VPNStage.wait_connection) {
-            _startConnectionTimeout();
-          } else if (vpnStage == VPNStage.connected ||
-              vpnStage == VPNStage.disconnected ||
-              vpnStage == VPNStage.error ||
-              vpnStage == VPNStage.denied) {
-            _cancelConnectionTimeout();
-          }
-        }
+        print(
+            '📡 Stage changed: $previousStage → $vpnStage (isConnectionAttempt: $_isConnectionAttempt)');
 
-        if (Platform.isIOS && _autoReconnectEnabled) {
-          if (vpnStage == VPNStage.connecting) {
-            onAutoReconnectEvent?.call("Attempting to reconnect...");
-          } else if (vpnStage == VPNStage.connected &&
-              previousStage == VPNStage.connecting) {
-            onAutoReconnectEvent?.call("Auto-reconnect successful");
+        // Handle stage transitions
+        if (vpnStage == VPNStage.connecting ||
+            vpnStage == VPNStage.authenticating ||
+            vpnStage == VPNStage.prepare ||
+            vpnStage == VPNStage.wait_connection) {
+          // If we're in a connection attempt and this is a reconnect
+          if (_isConnectionAttempt && previousStage == VPNStage.disconnected) {
+            _reconnectAttempts++;
+            print('🔄 Reconnect attempt #$_reconnectAttempts');
+            onAutoReconnectEvent?.call(
+                "Reconnect attempt $_reconnectAttempts/$_maxReconnectAttempts");
           }
+
+          // Check timeout with accumulated time
+          _startOrCheckConnectionTimeout();
+        } else if (vpnStage == VPNStage.connected) {
+          // Success! End the connection attempt
+          print(
+              '✅ Connected successfully after $_reconnectAttempts reconnect attempts');
+          _endConnectionAttempt();
+
+          if (Platform.isIOS &&
+              _autoReconnectEnabled &&
+              _reconnectAttempts > 0) {
+            onAutoReconnectEvent?.call(
+                "Auto-reconnect successful after $_reconnectAttempts attempts");
+          }
+        } else if (vpnStage == VPNStage.disconnected && !_isConnectionAttempt) {
+          // Clean disconnection (not during connection attempt)
+          _endConnectionAttempt();
+        } else if (vpnStage == VPNStage.error || vpnStage == VPNStage.denied) {
+          // Error states - end connection attempt
+          print('⚠️ Error state reached: $vpnStage');
+          _endConnectionAttempt();
         }
       }
 
+      // Manage status timer
       if (vpnStage == VPNStage.connected ||
           (Platform.isAndroid && vpnStage != VPNStage.disconnected)) {
         _createTimer();
