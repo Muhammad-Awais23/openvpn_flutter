@@ -51,7 +51,7 @@ class OpenVPN {
   Timer? _connectionTimeoutTimer;
 
   ///Connection timeout duration (default: 20 seconds)
-  Duration _connectionTimeout = const Duration(seconds: 20);
+  Duration _connectionTimeout = const Duration(seconds: 45);
 
   ///To indicate the engine already initialize
   bool initialized = false;
@@ -464,17 +464,24 @@ class OpenVPN {
     print(
         '⏱️ Timeout check - Elapsed: ${elapsedTime.inSeconds}s, Remaining: ${remainingTime.inSeconds}s, Attempts: $_reconnectAttempts/$_maxReconnectAttempts');
 
-    // Check if we've exceeded the timeout OR max reconnect attempts
-    if (remainingTime <= Duration.zero ||
-        _reconnectAttempts >= _maxReconnectAttempts) {
-      print('❌ Connection timeout reached!');
+    // FIXED: Check timeout OR attempts, but give servers enough time
+    if (remainingTime <= Duration.zero) {
+      print('❌ Connection timeout reached after ${elapsedTime.inSeconds}s!');
+      _handleConnectionTimeout();
+      return;
+    }
+
+    // FIXED: Separate check for max attempts (only for reconnects)
+    if (_reconnectAttempts >= _maxReconnectAttempts && _reconnectAttempts > 0) {
+      print('❌ Max reconnect attempts ($_reconnectAttempts) reached!');
       _handleConnectionTimeout();
       return;
     }
 
     // Set timer for remaining time
     _connectionTimeoutTimer = Timer(remainingTime, () {
-      print('❌ Connection timeout triggered!');
+      print(
+          '❌ Connection timeout triggered after ${_connectionTimeout.inSeconds}s!');
       _handleConnectionTimeout();
     });
   }
@@ -498,6 +505,20 @@ class OpenVPN {
     }
   }
 
+  bool _isConnectingStage(VPNStage stage) {
+    return stage == VPNStage.connecting ||
+        stage == VPNStage.authenticating ||
+        stage == VPNStage.prepare ||
+        stage == VPNStage.wait_connection ||
+        stage == VPNStage.authentication ||
+        stage == VPNStage.tcp_connect ||
+        stage == VPNStage.udp_connect ||
+        stage == VPNStage.assign_ip ||
+        stage == VPNStage.resolve ||
+        stage == VPNStage.vpn_generate_config ||
+        stage == VPNStage.get_config;
+  }
+
   ///Initialize listener
   void _initializeListener() {
     _vpnStageSnapshot().listen((event) {
@@ -509,14 +530,13 @@ class OpenVPN {
         onVpnStageChanged?.call(vpnStage, event);
 
         print(
-            '📡 Stage changed: $previousStage → $vpnStage (isConnectionAttempt: $_isConnectionAttempt)');
+            '📡 Stage changed: $previousStage → $vpnStage (raw: $event, isConnectionAttempt: $_isConnectionAttempt)');
 
         // Handle stage transitions
-        if (vpnStage == VPNStage.connecting ||
-            vpnStage == VPNStage.authenticating ||
-            vpnStage == VPNStage.prepare ||
-            vpnStage == VPNStage.wait_connection) {
-          // If we're in a connection attempt and this is a reconnect
+        if (_isConnectingStage(vpnStage)) {
+          // We're in a connecting stage
+
+          // If we're transitioning FROM disconnected, this is a (re)connect attempt
           if (_isConnectionAttempt && previousStage == VPNStage.disconnected) {
             _reconnectAttempts++;
             print('🔄 Reconnect attempt #$_reconnectAttempts');
@@ -528,8 +548,12 @@ class OpenVPN {
           _startOrCheckConnectionTimeout();
         } else if (vpnStage == VPNStage.connected) {
           // Success! End the connection attempt
-          print(
-              '✅ Connected successfully after $_reconnectAttempts reconnect attempts');
+          if (_connectionAttemptStartTime != null) {
+            final totalTime =
+                DateTime.now().difference(_connectionAttemptStartTime!);
+            print(
+                '✅ Connected successfully after ${totalTime.inSeconds}s and $_reconnectAttempts reconnect attempts');
+          }
           _endConnectionAttempt();
 
           if (Platform.isIOS &&
@@ -538,13 +562,33 @@ class OpenVPN {
             onAutoReconnectEvent?.call(
                 "Auto-reconnect successful after $_reconnectAttempts attempts");
           }
-        } else if (vpnStage == VPNStage.disconnected && !_isConnectionAttempt) {
-          // Clean disconnection (not during connection attempt)
-          _endConnectionAttempt();
+        } else if (vpnStage == VPNStage.disconnected) {
+          if (_isConnectionAttempt) {
+            // We're in a connection attempt and got disconnected
+            // This could be:
+            // 1. Auto-reconnect scenario (iOS) - handled by iOS native code
+            // 2. Connection failed - will timeout or retry
+            print('⚠️ Disconnected during connection attempt');
+
+            // Don't immediately end connection attempt - let timeout or iOS auto-reconnect handle it
+            // Only end if we're not expecting auto-reconnect
+            if (!_autoReconnectEnabled || !Platform.isIOS) {
+              _endConnectionAttempt();
+            }
+          } else {
+            // Clean disconnection (not during connection attempt)
+            _endConnectionAttempt();
+          }
         } else if (vpnStage == VPNStage.error || vpnStage == VPNStage.denied) {
-          // Error states - end connection attempt
+          // Error states - end connection attempt immediately
           print('⚠️ Error state reached: $vpnStage');
           _endConnectionAttempt();
+        } else if (vpnStage == VPNStage.exiting) {
+          // Exiting state
+          print('🚪 VPN exiting');
+        } else if (vpnStage == VPNStage.unknown) {
+          // Unknown state - log but don't kill connection attempt immediately
+          print('❓ Unknown VPN stage from event: $event');
         }
       }
 
