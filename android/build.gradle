@@ -59,7 +59,7 @@ dependencies {
     }
     compileOnly files("$flutterRoot/bin/cache/artifacts/engine/android-arm/flutter.jar")
 
-    implementation 'com.github.Muhammad-Awais23:openvpn_library_custom:8bf4792fd9'
+    implementation 'com.github.Muhammad-Awais23:openvpn_library_custom:01c07a35ff'
 
     implementation 'androidx.annotation:annotation-jvm:1.9.1'
 }
