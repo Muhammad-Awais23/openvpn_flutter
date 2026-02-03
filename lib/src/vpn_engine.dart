@@ -442,6 +442,7 @@ class OpenVPN {
 
   /// Start connection timeout timer
   void _startConnectionTimeout() {
+    // Cancel any existing timer
     _connectionTimeoutTimer?.cancel();
 
     if (!_isConnectionAttempt) {
@@ -461,8 +462,22 @@ class OpenVPN {
   /// Handle connection timeout
   void _handleConnectionTimeout() {
     print('🚫 Handling connection timeout - disconnecting...');
-    _endConnectionAttempt();
-    disconnect();
+
+    // First end the connection attempt tracking
+    _isConnectionAttempt = false;
+    _connectionAttemptStartTime = null;
+    _connectionTimeoutTimer?.cancel();
+    _connectionTimeoutTimer = null;
+
+    // Disconnect from VPN
+    _tempDateTime = null;
+    _channelControl.invokeMethod("disconnect");
+    if (_vpnStatusTimer?.isActive ?? false) {
+      _vpnStatusTimer?.cancel();
+      _vpnStatusTimer = null;
+    }
+
+    // Notify listeners
     onConnectionTimeout?.call();
     onAutoReconnectEvent?.call("Connection timeout");
   }
@@ -504,7 +519,7 @@ class OpenVPN {
 
         // Handle stage transitions
         if (vpnStage == VPNStage.connected) {
-          // Success!
+          // Success! Cancel timeout
           if (_connectionAttemptStartTime != null) {
             final totalTime =
                 DateTime.now().difference(_connectionAttemptStartTime!);
@@ -512,15 +527,35 @@ class OpenVPN {
           }
           _endConnectionAttempt();
         } else if (vpnStage == VPNStage.disconnected) {
-          // Connection ended
+          // Connection ended - cancel timeout
           _endConnectionAttempt();
         } else if (vpnStage == VPNStage.error || vpnStage == VPNStage.denied) {
           print('❌ Error/Denied stage reached');
           _endConnectionAttempt();
         } else if (vpnStage == VPNStage.exiting) {
           print('🚪 VPN exiting');
+          _endConnectionAttempt();
+        } else if (vpnStage == VPNStage.disconnecting) {
+          print('🔌 VPN disconnecting');
+          _endConnectionAttempt();
         } else if (vpnStage == VPNStage.unknown) {
           print('❓ Unknown VPN stage from event: $event');
+          // Don't end connection attempt for unknown stages
+        } else if (_isConnectingStage(vpnStage)) {
+          // Still in a connecting stage - ensure timeout is active
+          if (_isConnectionAttempt) {
+            // Check if we've exceeded the timeout already
+            if (_connectionAttemptStartTime != null) {
+              final elapsed =
+                  DateTime.now().difference(_connectionAttemptStartTime!);
+              if (elapsed > _connectionTimeout) {
+                print(
+                    '⚠️ Already exceeded timeout (${elapsed.inSeconds}s > ${_connectionTimeout.inSeconds}s), triggering now');
+                _handleConnectionTimeout();
+                return;
+              }
+            }
+          }
         }
       }
 
