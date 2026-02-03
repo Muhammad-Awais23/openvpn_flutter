@@ -64,30 +64,11 @@ class OpenVPN {
   /// Track if auto-reconnect is enabled
   bool _autoReconnectEnabled = false;
 
-  /// Track when connection attempt started (to prevent timeout reset on reconnect)
+  /// Track when connection attempt started
   DateTime? _connectionAttemptStartTime;
 
-  /// Track if we're in a connection attempt (connecting or reconnecting)
+  /// Track if we're in a connection attempt
   bool _isConnectionAttempt = false;
-
-  /// Track number of full retry cycles (when all servers fail)
-  int _retryCycles = 0;
-
-  /// Maximum retry cycles when all servers fail (controlled from Flutter)
-  int _maxRetryCycles = 5;
-
-  /// Track if we're in a retry cycle
-  bool _isRetrying = false;
-
-  /// Store config for retries (IMPORTANT: Store FULL config with ALL servers)
-  String? _lastConfig;
-  String? _lastConfigName;
-  String? _lastUsername;
-  String? _lastPassword;
-  List<String>? _lastBypassPackages;
-  int? _lastAllowedSeconds;
-  bool? _lastIsProUser;
-  bool? _lastCertIsRequired;
 
   /// is a listener to see vpn status detail
   final Function(VpnStatus? data)? onVpnStatusChanged;
@@ -101,16 +82,12 @@ class OpenVPN {
   /// is a listener for connection timeout events
   final Function()? onConnectionTimeout;
 
-  /// is a listener for retry events
-  final Function(int currentCycle, int maxCycles)? onRetry;
-
   /// OpenVPN's Constructions, don't forget to implement the listeners
   OpenVPN({
     this.onVpnStatusChanged,
     this.onVpnStageChanged,
     this.onAutoReconnectEvent,
     this.onConnectionTimeout,
-    this.onRetry,
   });
 
   /// Check if VPN permission is granted
@@ -187,7 +164,6 @@ class OpenVPN {
     String? groupIdentifier,
     bool autoReconnect = false,
     Duration? connectionTimeout,
-    int maxRetryCycles = 5, // This is the 'x' times you'll pass from Flutter
     Function(VpnStatus status)? lastStatus,
     Function(VPNStage stage)? lastStage,
   }) async {
@@ -200,7 +176,6 @@ class OpenVPN {
     }
 
     _autoReconnectEnabled = autoReconnect;
-    _maxRetryCycles = maxRetryCycles; // Set max retry cycles from Flutter
     if (connectionTimeout != null) {
       _connectionTimeout = connectionTimeout;
     }
@@ -254,21 +229,9 @@ class OpenVPN {
   /// Get current connection timeout duration
   Duration get connectionTimeout => _connectionTimeout;
 
-  /// Set maximum retry cycles (how many times to retry all servers)
-  void setMaxRetryCycles(int maxCycles) {
-    _maxRetryCycles = maxCycles;
-  }
-
-  /// Get current max retry cycles
-  int get maxRetryCycles => _maxRetryCycles;
-
-  /// Get current retry cycle count
-  int get currentRetryCycle => _retryCycles;
-
   ///Connect to VPN
   Future connect(
-    String
-        config, // PASS FULL CONFIG WITH ALL SERVERS - DON'T USE filteredConfig()
+    String config,
     String name, {
     String? username,
     String? password,
@@ -284,25 +247,12 @@ class OpenVPN {
     }
 
     _tempDateTime = DateTime.now();
-    _retryCycles = 0; // Reset retry cycles
-    _isRetrying = false;
-
-    // Store FULL config with ALL servers for retries
-    _lastConfig = config;
-    _lastConfigName = name;
-    _lastUsername = username;
-    _lastPassword = password;
-    _lastBypassPackages = bypassPackages;
-    _lastAllowedSeconds = allowedSeconds;
-    _lastIsProUser = isProUser;
-    _lastCertIsRequired = certIsRequired;
-
     _startConnectionAttempt();
 
-    print('🚀 Starting connection with all servers in config');
+    print('🚀 Starting VPN connection');
 
     return _channelControl.invokeMethod("connect", {
-      "config": config, // Pass full config with all servers
+      "config": config,
       "name": name,
       "username": username,
       "password": password,
@@ -312,59 +262,9 @@ class OpenVPN {
     });
   }
 
-  /// Retry connection with all servers when all previous servers failed
-  Future<void> _retryAllServers() async {
-    if (_retryCycles >= _maxRetryCycles) {
-      print('❌ Max retry cycles ($_maxRetryCycles) reached - giving up');
-      onAutoReconnectEvent
-          ?.call("All servers failed after trying $_maxRetryCycles times");
-      onRetry?.call(_retryCycles, _maxRetryCycles);
-      _endConnectionAttempt();
-      disconnect();
-      return;
-    }
-
-    _retryCycles++;
-    _isRetrying = true;
-
-    // Calculate exponential backoff delay (2s, 4s, 6s, 8s, 10s...)
-    final delaySeconds = min(2 * _retryCycles, 10); // Max 10 seconds delay
-
-    print(
-        '🔄 Retry cycle $_retryCycles/$_maxRetryCycles - All servers failed, retrying all servers after ${delaySeconds}s delay');
-    onAutoReconnectEvent?.call(
-        "Retry $_retryCycles/$_maxRetryCycles - Trying all servers again in ${delaySeconds}s");
-    onRetry?.call(_retryCycles, _maxRetryCycles);
-
-    // Wait before retrying to avoid hammering servers
-    await Future.delayed(Duration(seconds: delaySeconds));
-
-    // Reconnect with FULL stored config (which has ALL servers)
-    if (_lastConfig != null && _lastConfigName != null) {
-      print('🔄 Retrying with FULL config containing all servers...');
-
-      _isRetrying = false; // Reset before new attempt
-
-      await _channelControl.invokeMethod("connect", {
-        "config": _lastConfig, // FULL config with ALL servers
-        "name": _lastConfigName,
-        "username": _lastUsername,
-        "password": _lastPassword,
-        "bypass_packages": _lastBypassPackages ?? [],
-        "allowed_seconds": _lastAllowedSeconds ?? 0,
-        "is_pro_user": _lastIsProUser ?? false,
-      });
-    } else {
-      print('❌ No stored config available for retry');
-      _endConnectionAttempt();
-    }
-  }
-
   ///Disconnect from VPN
   void disconnect() {
     _tempDateTime = null;
-    _retryCycles = 0;
-    _isRetrying = false;
     _endConnectionAttempt();
     _channelControl.invokeMethod("disconnect");
     if (_vpnStatusTimer?.isActive ?? false) {
@@ -463,9 +363,6 @@ class OpenVPN {
   }
 
   ///Filter config to use single random remote
-  ///⚠️ WARNING: DON'T USE THIS if you want to try all servers!
-  ///This picks only ONE random server and removes all others.
-  ///Use this ONLY if you want to test with a single random server.
   static Future<String?> filteredConfig(String? config) async {
     List<String> remotes = [];
     List<String> output = [];
@@ -532,44 +429,29 @@ class OpenVPN {
       _isConnectionAttempt = true;
       print('🔵 Connection attempt started at ${_connectionAttemptStartTime}');
     }
-    _startOrCheckConnectionTimeout();
+    _startConnectionTimeout();
   }
 
   /// End connection attempt tracking
   void _endConnectionAttempt() {
     _isConnectionAttempt = false;
     _connectionAttemptStartTime = null;
-    _retryCycles = 0;
-    _isRetrying = false;
     _cancelConnectionTimeout();
     print('🔴 Connection attempt ended');
   }
 
-  /// Start or check connection timeout based on total elapsed time
-  void _startOrCheckConnectionTimeout() {
-    // Cancel any existing timer
+  /// Start connection timeout timer
+  void _startConnectionTimeout() {
     _connectionTimeoutTimer?.cancel();
 
-    if (!_isConnectionAttempt || _connectionAttemptStartTime == null) {
+    if (!_isConnectionAttempt) {
       return;
     }
-
-    // Calculate how much time has elapsed since the first connection attempt
-    final elapsedTime = DateTime.now().difference(_connectionAttemptStartTime!);
-    final remainingTime = _connectionTimeout - elapsedTime;
 
     print(
-        '⏱️ Timeout check - Elapsed: ${elapsedTime.inSeconds}s, Remaining: ${remainingTime.inSeconds}s, Retry cycle: $_retryCycles/$_maxRetryCycles');
+        '⏱️ Starting connection timeout timer (${_connectionTimeout.inSeconds}s)');
 
-    // Check timeout
-    if (remainingTime <= Duration.zero) {
-      print('❌ Connection timeout reached after ${elapsedTime.inSeconds}s!');
-      _handleConnectionTimeout();
-      return;
-    }
-
-    // Set timer for remaining time
-    _connectionTimeoutTimer = Timer(remainingTime, () {
+    _connectionTimeoutTimer = Timer(_connectionTimeout, () {
       print(
           '❌ Connection timeout triggered after ${_connectionTimeout.inSeconds}s!');
       _handleConnectionTimeout();
@@ -582,8 +464,7 @@ class OpenVPN {
     _endConnectionAttempt();
     disconnect();
     onConnectionTimeout?.call();
-    onAutoReconnectEvent?.call(
-        "Connection timeout after trying all servers $_retryCycles times");
+    onAutoReconnectEvent?.call("Connection timeout");
   }
 
   ///Cancel connection timeout timer
@@ -619,53 +500,23 @@ class OpenVPN {
         _lastStage = vpnStage;
         onVpnStageChanged?.call(vpnStage, event);
 
-        print(
-            '📡 Stage: $previousStage → $vpnStage (raw: $event, retry cycle: $_retryCycles/$_maxRetryCycles)');
+        print('📡 Stage: $previousStage → $vpnStage (raw: $event)');
 
         // Handle stage transitions
-        if (_isConnectingStage(vpnStage)) {
-          // Check timeout with accumulated time
-          _startOrCheckConnectionTimeout();
-        } else if (vpnStage == VPNStage.connected) {
-          // Success! Reset everything
+        if (vpnStage == VPNStage.connected) {
+          // Success!
           if (_connectionAttemptStartTime != null) {
             final totalTime =
                 DateTime.now().difference(_connectionAttemptStartTime!);
-            print(
-                '✅ Connected successfully after ${totalTime.inSeconds}s and $_retryCycles retry cycles');
+            print('✅ Connected successfully after ${totalTime.inSeconds}s');
           }
           _endConnectionAttempt();
-
-          if (_retryCycles > 0) {
-            onAutoReconnectEvent?.call(
-                "Successfully connected after $_retryCycles retry cycles");
-          }
         } else if (vpnStage == VPNStage.disconnected) {
-          // All servers in config tried and failed
-          if (_isConnectionAttempt && !_isRetrying) {
-            print(
-                '⚠️ All servers tried and failed - checking if should retry all servers');
-            if (_retryCycles < _maxRetryCycles) {
-              _retryAllServers();
-            } else {
-              print(
-                  '❌ Max retry cycles reached ($_maxRetryCycles) - giving up');
-              _endConnectionAttempt();
-            }
-          } else if (_isRetrying) {
-            // We're waiting for retry to start
-            print('🔄 Disconnected, retry cycle $_retryCycles in progress...');
-          } else {
-            // Clean disconnection by user
-            _endConnectionAttempt();
-          }
+          // Connection ended
+          _endConnectionAttempt();
         } else if (vpnStage == VPNStage.error || vpnStage == VPNStage.denied) {
-          print('❌ Error/Denied - checking if should retry all servers');
-          if (_isConnectionAttempt && _retryCycles < _maxRetryCycles) {
-            _retryAllServers();
-          } else {
-            _endConnectionAttempt();
-          }
+          print('❌ Error/Denied stage reached');
+          _endConnectionAttempt();
         } else if (vpnStage == VPNStage.exiting) {
           print('🚪 VPN exiting');
         } else if (vpnStage == VPNStage.unknown) {
